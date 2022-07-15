@@ -246,8 +246,8 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     extraQuery: (qb: SelectQueryBuilder<T>) => void = () => {},
   ) {
     const query = this.queryBuilder();
+    const newEnt = new this.entityClass();
     if (ent) {
-      const newEnt = new this.entityClass();
       Object.assign(newEnt, ent);
       newEnt.applyQuery(query, this.entityAliasName);
     }
@@ -261,7 +261,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         'success',
         ents,
         count,
-        ent.getActualPageSettings(),
+        newEnt.getActualPageSettings(),
       );
     } catch (e) {
       const [sql, params] = query.getQueryAndParameters();
