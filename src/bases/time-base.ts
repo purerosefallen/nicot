@@ -1,6 +1,6 @@
 import { CreateDateColumn, DeleteDateColumn, UpdateDateColumn } from 'typeorm';
-import { PageSettingsDto } from '../dto';
 import { NotColumn } from '../decorators';
+import { PageSettingsDto } from './page-settings';
 
 export interface DeletionWise {
   deleteTime?: Date;

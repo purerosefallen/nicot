@@ -1,8 +1,7 @@
 import {
   BlankReturnMessageDto,
-  PageSettingsFactory,
+  ImportEntryDto,
   PaginatedReturnMessageDto,
-  QueryWise,
   ReturnMessageDto,
 } from './dto';
 import {
@@ -13,7 +12,12 @@ import {
   SelectQueryBuilder,
   UpdateResult,
 } from 'typeorm';
-import { DeletionWise, ImportWise } from './bases';
+import {
+  DeletionWise,
+  ImportWise,
+  PageSettingsFactory,
+  QueryWise,
+} from './bases';
 import { ImportEntry } from './dto/import-entry';
 import { ConsoleLogger } from '@nestjs/common';
 import { camelCase } from 'typeorm/util/StringUtils';
@@ -46,6 +50,8 @@ export interface CrudOptions<T extends ValidCrudEntity<T>> {
 export class CrudBase<T extends ValidCrudEntity<T>> {
   readonly entityName = this.entityClass.name;
   readonly entityReturnMessageDto = ReturnMessageDto(this.entityClass);
+  readonly importEntryDto = ImportEntryDto(this.entityClass);
+  readonly importReturnMessageDto = ReturnMessageDto([this.importEntryDto]);
   readonly entityPaginatedReturnMessageDto = PaginatedReturnMessageDto(
     this.entityClass,
   );
@@ -69,7 +75,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     skipErrors = false,
   ) {
     const entsWithId = ents.filter((ent) => ent.id != null);
-    return await this.repo.manager.transaction(async (mdb) => {
+    const result = await this.repo.manager.transaction(async (mdb) => {
       let skipped: { result: string; entry: T }[] = [];
       const repo = mdb.getRepository(this.entityClass);
 
@@ -130,6 +136,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         throw new BlankReturnMessageDto(500, 'internal error').toException();
       }
     });
+    return result;
   }
 
   async create(ent: T, beforeCreate?: (repo: Repository<T>) => Promise<void>) {
@@ -324,7 +331,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   async importEntities(
     ents: T[],
     extraChecking?: (ent: T) => string | Promise<string>,
-  ): Promise<ImportEntry<T>[]> {
+  ) {
     const invalidResults = _.compact(
       await Promise.all(
         ents.map(async (ent) => {
@@ -356,7 +363,15 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       ...data.skipped,
       ...data.results.map((e) => ({ entry: e, result: 'OK' })),
     ];
-    return results;
+    return new this.importReturnMessageDto(
+      201,
+      'success',
+      results.map((r) => {
+        const entry = new this.importEntryDto();
+        Object.assign(entry, r);
+        return entry;
+      }),
+    );
   }
 
   async exists(id: EntityId<T>): Promise<boolean> {

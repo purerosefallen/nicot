@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { HttpException } from '@nestjs/common';
-import { PageSettingsWise } from './page-settings';
+import { PageSettingsWise } from '../bases/page-settings';
 import {
   AnyClass,
   ClassOrArray,
