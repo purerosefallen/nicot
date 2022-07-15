@@ -38,8 +38,8 @@ export type ValidCrudEntity<T> = Record<string, any> & {
   PageSettingsFactory;
 
 export interface CrudOptions<T extends ValidCrudEntity<T>> {
-  relations: (string | RelationDef)[];
-  extraGetQuery: (qb: SelectQueryBuilder<T>) => void;
+  relations?: (string | RelationDef)[];
+  extraGetQuery?: (qb: SelectQueryBuilder<T>) => void;
   hardDelete?: boolean;
 }
 
