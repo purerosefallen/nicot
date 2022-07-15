@@ -1,0 +1,52 @@
+stages:
+  - install
+  - build
+  - deploy
+
+variables:
+  GIT_DEPTH: "1"
+
+npm_ci:
+  stage: install
+  tags:
+    - linux
+  script:
+    - npm ci
+  artifacts:
+    paths:
+      - node_modules
+
+.build_base:
+  stage: build
+  tags:
+    - linux
+  dependencies:
+    - npm_ci
+
+build:
+  extends:
+    - .build_base
+  script:
+    - npm run build
+  artifacts:
+    paths:
+      - dist/
+
+unit-test:
+  extends:
+    - .build_base
+  script:
+    - npm run test
+
+deploy_npm:
+  stage: deploy
+  dependencies:
+    - build
+  tags:
+    - linux
+  script:
+    - apt update;apt -y install coreutils
+    - echo $NPMRC | base64 --decode > ~/.npmrc
+    - npm publish . || true
+  only:
+    - master

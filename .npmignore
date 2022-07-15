@@ -1,0 +1,12 @@
+/install-npm.sh
+.git*
+/data
+/output
+/config.yaml
+.idea
+.dockerignore
+Dockerfile
+/src
+/coverage
+/tests
+/dist/tests
