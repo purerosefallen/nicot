@@ -1,5 +1,5 @@
 import { CreateDateColumn, DeleteDateColumn, UpdateDateColumn } from 'typeorm';
-import { PageSettingsDto } from '../dto/page-settings';
+import { PageSettingsDto } from '../dto';
 import { NotColumn } from '../decorators';
 
 export interface DeletionWise {
@@ -36,8 +36,10 @@ export class TimeBase
     return;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   async prepareForSaving(): Promise<void> {}
 
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   afterSaving() {}
 }
 

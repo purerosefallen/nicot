@@ -1,6 +1,6 @@
 import { TimeBase } from './time-base';
 import { Generated, SelectQueryBuilder } from 'typeorm';
-import { applyQueryProperty } from '../utility/query';
+import { applyQueryProperty } from '../utility';
 import {
   IntColumn,
   MergePropertyDecorators,

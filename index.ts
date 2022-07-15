@@ -1,3 +1,5 @@
+import 'reflect-metadata';
+
 export * from './src/crud-base';
 export * from './src/bases';
 export * from './src/decorators';
