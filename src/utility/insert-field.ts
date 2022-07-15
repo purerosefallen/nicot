@@ -45,7 +45,7 @@ export function InsertField<
       ...(map[key].options || {}),
     })(extendedCl.prototype, key);
   }
-  Object.defineProperty(cl, 'name', {
+  Object.defineProperty(extendedCl, 'name', {
     value: newName || cl.name,
   });
   return extendedCl;
