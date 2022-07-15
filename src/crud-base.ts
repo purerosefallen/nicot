@@ -8,6 +8,7 @@ import {
   DeepPartial,
   DeleteResult,
   FindOptionsWhere,
+  In,
   Repository,
   SelectQueryBuilder,
   UpdateResult,
@@ -18,7 +19,6 @@ import {
   PageSettingsFactory,
   QueryWise,
 } from './bases';
-import { ImportEntry } from './dto/import-entry';
 import { ConsoleLogger } from '@nestjs/common';
 import { camelCase } from 'typeorm/util/StringUtils';
 import _ from 'lodash';
