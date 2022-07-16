@@ -95,3 +95,33 @@ export class UserController {
   }
 }
 ```
+
+## Return message
+
+Return data of all APIs are in the following format, with proper OpenAPI documentation: 
+
+```ts
+export interface ReturnMessage<T> {
+  statusCode: number;
+  message: string;
+  success: boolean;
+  data: T;
+}
+```
+
+You may also create a Dto class like this by the following way:
+
+```ts
+export class UserReturnMessage extends ReturnMessageDto(User) {}
+```
+
+With result into the following class, also with proper OpenAPI documentation:
+
+```ts
+export class UserReturnMessage {
+  statusCode: number;
+  message: string;
+  success: boolean;
+  data: User;
+}
+```
