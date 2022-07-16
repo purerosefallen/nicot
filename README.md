@@ -39,6 +39,11 @@ export class User extends IdBase() {
 }
 ```
 
+There are also other following decorators to control accessibility:
+
+- `@NotWritable()` Can only come from GET requests.
+- `@NotChangeable()` Cannot be changed by PATCH requests.
+
 ## CrudService
 
 Creates a service for database operation in one word.
