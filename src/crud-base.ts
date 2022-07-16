@@ -15,7 +15,7 @@ import {
 } from 'typeorm';
 import {
   DeletionWise,
-  ImportWise,
+  EntityHooks,
   PageSettingsFactory,
   QueryWise,
 } from './bases';
@@ -38,7 +38,7 @@ export type ValidCrudEntity<T> = Record<string, any> & {
   id: any;
 } & QueryWise<T> &
   DeletionWise &
-  ImportWise &
+  EntityHooks &
   PageSettingsFactory;
 
 export interface CrudOptions<T extends ValidCrudEntity<T>> {
@@ -143,7 +143,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     if (!ent) {
       throw new BlankReturnMessageDto(400, 'Invalid entity').toException();
     }
-    const invalidReason = ent.isValidInCreation();
+    const invalidReason = ent.isValidInCreate();
     if (invalidReason) {
       throw new BlankReturnMessageDto(400, invalidReason).toException();
     }
@@ -169,10 +169,10 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       if (beforeCreate) {
         await beforeCreate(repo);
       }
-      await ent.beforeSaving();
+      await ent.beforeCreate();
       try {
         const savedEnt = await repo.save(ent as DeepPartial<T>);
-        await savedEnt.afterSaving();
+        await savedEnt.afterCreate();
       } catch (e) {
         this.log.error(
           `Failed to create entity ${JSON.stringify(ent)}: ${e.toString()}`,
@@ -246,6 +246,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         `${this.entityName} ID ${id} not found.`,
       ).toException();
     }
+    await ent.afterGet();
     return new this.entityReturnMessageDto(200, 'success', ent);
   }
 
@@ -258,6 +259,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     const newEnt = new this.entityClass();
     if (ent) {
       Object.assign(newEnt, ent);
+      await newEnt.beforeGet();
       newEnt.applyQuery(query, this.entityAliasName);
     }
     this._applyRelationsToQuery(query);
@@ -265,6 +267,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     extraQuery(query);
     try {
       const [ents, count] = await query.getManyAndCount();
+      await Promise.all(ents.map((ent) => ent.afterGet()));
       return new this.entityPaginatedReturnMessageDto(
         200,
         'success',
@@ -289,13 +292,20 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     cond: FindOptionsWhere<T> = {},
   ) {
     let result: UpdateResult;
+    const ent = new this.entityClass();
+    Object.assign(ent, entPart);
+    const invalidReason = ent.isValidInUpdate();
+    if (invalidReason) {
+      throw new BlankReturnMessageDto(400, invalidReason).toException();
+    }
+    await ent.beforeUpdate();
     try {
       result = await this.repo.update(
         {
           id,
           ...cond,
         },
-        entPart,
+        ent,
       );
     } catch (e) {
       this.log.error(
@@ -344,7 +354,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     const invalidResults = _.compact(
       await Promise.all(
         ents.map(async (ent) => {
-          const reason = ent.isValidInCreation();
+          const reason = ent.isValidInCreate();
           if (reason) {
             return { entry: ent, result: reason };
           }
@@ -360,9 +370,9 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     const remainingEnts = ents.filter(
       (ent) => !invalidResults.find((result) => result.entry === ent),
     );
-    await Promise.all(remainingEnts.map((ent) => ent.beforeSaving()));
+    await Promise.all(remainingEnts.map((ent) => ent.beforeCreate()));
     const data = await this._batchCreate(remainingEnts, undefined, true);
-    await Promise.all(data.results.map((e) => e.afterSaving()));
+    await Promise.all(data.results.map((e) => e.afterCreate()));
     const results = [
       ...invalidResults,
       ...data.skipped,

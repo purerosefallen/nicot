@@ -6,15 +6,19 @@ export interface DeletionWise {
   deleteTime?: Date;
 }
 
-export interface ImportWise {
-  isValidInCreation(): string | undefined;
-  beforeSaving(): Promise<void>;
-  afterSaving(): void;
+export interface EntityHooks {
+  isValidInCreate(): string | undefined;
+  beforeCreate(): Promise<void>;
+  afterCreate(): Promise<void>;
+  beforeGet(): Promise<void>;
+  afterGet(): Promise<void>;
+  isValidInUpdate(): string | undefined;
+  beforeUpdate(): Promise<void>;
 }
 
 export class TimeBase
   extends PageSettingsDto
-  implements DeletionWise, ImportWise
+  implements DeletionWise, EntityHooks
 {
   @CreateDateColumn({ select: false })
   @NotColumn()
@@ -28,15 +32,28 @@ export class TimeBase
   @NotColumn()
   deleteTime: Date;
 
-  isValidInCreation(): string | undefined {
+  isValidInCreate(): string | undefined {
     return;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-empty-function
-  async beforeSaving(): Promise<void> {}
+  async beforeCreate(): Promise<void> {}
 
   // eslint-disable-next-line @typescript-eslint/no-empty-function
-  async afterSaving(): Promise<void> {}
+  async afterCreate(): Promise<void> {}
+
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  async beforeGet(): Promise<void> {}
+
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  async afterGet(): Promise<void> {}
+
+  isValidInUpdate(): string | undefined {
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  async beforeUpdate(): Promise<void> {}
 }
 
 export const TimeBaseFields: (keyof TimeBase)[] = [

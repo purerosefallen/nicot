@@ -36,6 +36,32 @@ export class User extends IdBase() {
   
   @NotColumn()
   somethingElse: any; // Would not come from client input, and would not go into OpenAPI document.
+  
+  // possible optional override operations
+  
+  override isValidInCreation() { // Custom before-create check.
+    if (!this.name.length) {
+      return 'Name cannot be empty!';
+    }
+  }
+  
+  override isValidInUpdate() { // Custom before-update check.
+    if (this.name && !this.name.length) {
+      return 'Name cannot be empty!';
+    }
+  }
+  
+  override async beforeCreate() {
+    this.name = this.name.toLowerCase(); // Do something before create.
+  }
+  
+  override async afterCreate() {
+    this.name = this.name.toUpperCase(); // Do something after create before sending to user.
+  }
+  
+  override async beforeGet() {}
+  override async afterGet() {}
+  override async beforeUpdate() {}
 }
 ```
 
