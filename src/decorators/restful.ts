@@ -87,7 +87,7 @@ export class RestfulFactory<T extends TimeBase> {
     ]);
   }
 
-  findOneId() {
+  idParam() {
     if (this.idType === Number) {
       return Param('id', ParseIntPipe);
     } else {

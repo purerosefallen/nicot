@@ -305,7 +305,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     return new BlankReturnMessageDto(200, 'success');
   }
 
-  async remove(id: EntityId<T>, cond: FindOptionsWhere<T> = {}) {
+  async delete(id: EntityId<T>, cond: FindOptionsWhere<T> = {}) {
     let result: UpdateResult | DeleteResult;
     const searchCond = {
       id,
@@ -382,7 +382,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
 
 export function CrudService<T extends ValidCrudEntity<T>>(
   entityClass: ClassType<T>,
-  crudOptions: CrudOptions<T>,
+  crudOptions: CrudOptions<T> = {},
 ) {
   return class CrudServiceImpl extends CrudBase<T> {
     constructor(repo: Repository<T>) {

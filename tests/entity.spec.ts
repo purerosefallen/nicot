@@ -1,42 +1,8 @@
-import { Index } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
-import { EnumColumn, IntColumn, StringColumn, IdBase, StringIdBase } from '..';
 import { validateSync } from 'class-validator';
+import { Gender, User, User2 } from './utility/user';
 
-enum Gender {
-  F = 'F',
-  M = 'M',
-}
-
-class User extends IdBase() {
-  @Index()
-  @StringColumn(5, {
-    required: true,
-  })
-  name: string;
-
-  @IntColumn('int', { unsigned: true })
-  age: number;
-
-  @EnumColumn(Gender)
-  gender: Gender;
-}
-
-class User2 extends StringIdBase({ length: 20 }) {
-  @Index()
-  @StringColumn(5, {
-    required: true,
-  })
-  name: string;
-
-  @IntColumn('int', { unsigned: true })
-  age: number;
-
-  @EnumColumn(Gender)
-  gender: Gender;
-}
-
-describe('nicot', () => {
+describe('entity', () => {
   it('creates entity class', () => {
     expect(
       validateSync(plainToInstance(User, { name: 'John', age: 20 })),
