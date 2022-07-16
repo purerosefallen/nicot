@@ -1,4 +1,13 @@
-import { Body, Delete, Get, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import {
   BlankReturnMessageDto,
   PaginatedReturnMessageDto,
@@ -76,6 +85,14 @@ export class RestfulFactory<T extends TimeBase> {
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiOkResponse({ type: this.entityReturnMessageDto }),
     ]);
+  }
+
+  findOneId() {
+    if (this.idType === Number) {
+      return Param('id', ParseIntPipe);
+    } else {
+      return Param('id');
+    }
   }
 
   findAll(extras: Partial<OperationObject> = {}): MethodDecorator {
