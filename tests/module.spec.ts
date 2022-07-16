@@ -48,10 +48,11 @@ class UserController {
   }
 }
 
+/*
 describe('app', () => {
   let app: NestExpressApplication;
 
-  /*
+
   beforeEach(async () => {
     const module = await Test.createTestingModule({
       imports: [
@@ -135,5 +136,6 @@ describe('app', () => {
     });
     await request(server).get('/user/1').expect(404);
   });
-  */
+
 });
+ */
