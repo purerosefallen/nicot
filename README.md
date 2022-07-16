@@ -33,6 +33,9 @@ export class User extends IdBase() {
 
   @EnumColumn(Gender, { description: 'User gender' })
   gender: Gender;
+  
+  @NotColumn()
+  somethingElse: any; // Would not come from client input, and would not go into OpenAPI document.
 }
 ```
 
@@ -50,6 +53,8 @@ export class UserService extends CrudService(User) {
 ```
 
 ## Controller decorators
+
+Would also register proper OpenAPI documentation for the controller.
 
 ```ts
 const dec = new RestfulFactory(User);
