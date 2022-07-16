@@ -4,13 +4,13 @@ import { CrudService } from '../src/crud-base';
 import { Gender, User } from './utility/user';
 import { RestfulFactory } from '../src/decorators';
 import { Test } from '@nestjs/testing';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import request from 'supertest';
 
 @Injectable()
 class UserService extends CrudService(User) {
-  constructor(db: DataSource) {
+  constructor(@InjectDataSource() db: DataSource) {
     super(db.getRepository(User));
   }
 }
