@@ -110,7 +110,7 @@ export class UserController {
     return this.userService.findAll(user);
   }
 
-  @dec.update() // PATH /:id
+  @dec.update() // PATCH /:id
   update(@dec.idParam() id: number, @dec.updateParam() user: UpdateUserDto) {
     return this.userService.update(id, user);
   }
