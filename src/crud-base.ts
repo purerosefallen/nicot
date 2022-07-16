@@ -69,7 +69,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     this.extraGetQuery = crudOptions.extraGetQuery || ((qb) => {});
   }
 
-  async batchCreate(
+  async _batchCreate(
     ents: T[],
     beforeCreate?: (repo: Repository<T>) => Promise<void>,
     skipErrors = false,
@@ -133,13 +133,20 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         this.log.error(
           `Failed to create entity ${JSON.stringify(ents)}: ${e.toString()}`,
         );
-        throw new BlankReturnMessageDto(500, 'internal error').toException();
+        throw new BlankReturnMessageDto(500, 'Internal error').toException();
       }
     });
     return result;
   }
 
   async create(ent: T, beforeCreate?: (repo: Repository<T>) => Promise<void>) {
+    if (!ent) {
+      throw new BlankReturnMessageDto(400, 'Invalid entity').toException();
+    }
+    const invalidReason = ent.isValidInCreation();
+    if (invalidReason) {
+      throw new BlankReturnMessageDto(400, invalidReason).toException();
+    }
     const savedEnt = await this.repo.manager.transaction(async (mdb) => {
       const repo = mdb.getRepository(this.entityClass);
       if (ent.id != null) {
@@ -162,13 +169,15 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       if (beforeCreate) {
         await beforeCreate(repo);
       }
+      await ent.beforeSaving();
       try {
-        return await repo.save(ent as DeepPartial<T>);
+        const savedEnt = await repo.save(ent as DeepPartial<T>);
+        await savedEnt.afterSaving();
       } catch (e) {
         this.log.error(
           `Failed to create entity ${JSON.stringify(ent)}: ${e.toString()}`,
         );
-        throw new BlankReturnMessageDto(500, 'internal error').toException();
+        throw new BlankReturnMessageDto(500, 'Internal error').toException();
       }
     });
     return new this.entityReturnMessageDto(201, 'success', savedEnt);
@@ -178,7 +187,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     return camelCase(this.entityName);
   }
 
-  applyRelationToQuery(qb: SelectQueryBuilder<T>, relation: RelationDef) {
+  _applyRelationToQuery(qb: SelectQueryBuilder<T>, relation: RelationDef) {
     const { name } = relation;
     const relationUnit = name.split('.');
     const base =
@@ -193,12 +202,12 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     qb[methodName](`${base}.${property}`, properyAlias);
   }
 
-  applyRelationsToQuery(qb: SelectQueryBuilder<T>) {
+  _applyRelationsToQuery(qb: SelectQueryBuilder<T>) {
     for (const relation of this.entityRelations) {
       if (typeof relation === 'string') {
-        this.applyRelationToQuery(qb, { name: relation });
+        this._applyRelationToQuery(qb, { name: relation });
       } else {
-        this.applyRelationToQuery(qb, relation);
+        this._applyRelationToQuery(qb, relation);
       }
     }
   }
@@ -215,7 +224,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     const query = this.queryBuilder()
       .where(`${this.entityAliasName}.id = :id`, { id })
       .take(1);
-    this.applyRelationsToQuery(query);
+    this._applyRelationsToQuery(query);
     this.extraGetQuery(query);
     extraQuery(query);
     query.take(1);
@@ -229,7 +238,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
           ',',
         )}: ${e.toString()}`,
       );
-      throw new BlankReturnMessageDto(500, 'internal error').toException();
+      throw new BlankReturnMessageDto(500, 'Internal error').toException();
     }
     if (!ent) {
       throw new BlankReturnMessageDto(
@@ -251,7 +260,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       Object.assign(newEnt, ent);
       newEnt.applyQuery(query, this.entityAliasName);
     }
-    this.applyRelationsToQuery(query);
+    this._applyRelationsToQuery(query);
     this.extraGetQuery(query);
     extraQuery(query);
     try {
@@ -270,7 +279,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
           ent,
         )} with SQL ${sql} param ${params.join(',')}: ${e.toString()}`,
       );
-      throw new BlankReturnMessageDto(500, 'internal error').toException();
+      throw new BlankReturnMessageDto(500, 'Internal error').toException();
     }
   }
 
@@ -294,7 +303,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
           entPart,
         )}: ${e.toString()}`,
       );
-      throw new BlankReturnMessageDto(500, 'internal error').toException();
+      throw new BlankReturnMessageDto(500, 'Internal error').toException();
     }
     if (!result.affected) {
       throw new BlankReturnMessageDto(
@@ -317,7 +326,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         : this.repo.softDelete(searchCond));
     } catch (e) {
       this.log.error(`Failed to delete entity ID ${id}: ${e.toString()}`);
-      throw new BlankReturnMessageDto(500, 'internal error').toException();
+      throw new BlankReturnMessageDto(500, 'Internal error').toException();
     }
     if (!result.affected) {
       throw new BlankReturnMessageDto(
@@ -351,13 +360,9 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     const remainingEnts = ents.filter(
       (ent) => !invalidResults.find((result) => result.entry === ent),
     );
-    await Promise.all(remainingEnts.map((ent) => ent.prepareForSaving()));
-    const data = await this.batchCreate(remainingEnts, undefined, true);
-    data.results.forEach((e) => {
-      if (e.afterSaving) {
-        e.afterSaving();
-      }
-    });
+    await Promise.all(remainingEnts.map((ent) => ent.beforeSaving()));
+    const data = await this._batchCreate(remainingEnts, undefined, true);
+    await Promise.all(data.results.map((e) => e.afterSaving()));
     const results = [
       ...invalidResults,
       ...data.skipped,

@@ -8,7 +8,7 @@ export interface DeletionWise {
 
 export interface ImportWise {
   isValidInCreation(): string | undefined;
-  prepareForSaving(): Promise<void>;
+  beforeSaving(): Promise<void>;
   afterSaving(): void;
 }
 
@@ -28,19 +28,15 @@ export class TimeBase
   @NotColumn()
   deleteTime: Date;
 
-  toObject() {
-    return JSON.parse(JSON.stringify(this));
-  }
-
   isValidInCreation(): string | undefined {
     return;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-empty-function
-  async prepareForSaving(): Promise<void> {}
+  async beforeSaving(): Promise<void> {}
 
   // eslint-disable-next-line @typescript-eslint/no-empty-function
-  afterSaving() {}
+  async afterSaving(): Promise<void> {}
 }
 
 export const TimeBaseFields: (keyof TimeBase)[] = [
