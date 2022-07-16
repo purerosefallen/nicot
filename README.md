@@ -39,7 +39,7 @@ export class User extends IdBase() {
   
   // possible optional override operations
   
-  override isValidInCreation() { // Custom before-create check.
+  override isValidInCreate() { // Custom before-create check.
     if (!this.name.length) {
       return 'Name cannot be empty!';
     }
