@@ -79,6 +79,8 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       let skipped: { result: string; entry: T }[] = [];
       const repo = mdb.getRepository(this.entityClass);
 
+      let entsToSave = ents;
+
       if (entsWithId.length) {
         const existingEnts = await repo.find({
           // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -111,7 +113,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
               entry: ent,
             }));
             const skippedEntsSet = new Set(skippedEnts);
-            ents = ents.filter((ent) => !skippedEntsSet.has(ent));
+            entsToSave = ents.filter((ent) => !skippedEntsSet.has(ent));
           }
           if (existingEntsWithDeleteTime.length) {
             await repo.delete(
@@ -124,14 +126,16 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         await beforeCreate(repo);
       }
       try {
-        const results = await repo.save(ents as DeepPartial<T>[]);
+        const results = await repo.save(entsToSave as DeepPartial<T>[]);
         return {
           results,
           skipped,
         };
       } catch (e) {
         this.log.error(
-          `Failed to create entity ${JSON.stringify(ents)}: ${e.toString()}`,
+          `Failed to create entity ${JSON.stringify(
+            entsToSave,
+          )}: ${e.toString()}`,
         );
         throw new BlankReturnMessageDto(500, 'Internal error').toException();
       }
