@@ -82,7 +82,7 @@ export const StringColumn = (
 
 export const IntColumn = (
   type: WithWidthColumnType,
-  options: PropertyOptions<string, ColumnWithWidthOptions> & {
+  options: PropertyOptions<number, ColumnWithWidthOptions> & {
     unsigned?: boolean;
   } = {},
 ): PropertyDecorator => {
@@ -108,7 +108,7 @@ export const IntColumn = (
 
 export const FloatColumn = (
   type: WithPrecisionColumnType,
-  options: PropertyOptions<string, ColumnNumericOptions> & {
+  options: PropertyOptions<number, ColumnNumericOptions> & {
     unsigned?: boolean;
   } = {},
 ): PropertyDecorator => {
@@ -157,6 +157,13 @@ export const EnumColumn = <T>(
     swaggerDecorator(options, { type: 'enum', enum: targetEnum }),
   ]);
 };
+
+export const BoolColumn = (options: PropertyOptions<boolean> = {}): PropertyDecorator => MergePropertyDecorators([
+  Index(),
+  Column('boolean', columnDecoratorOptions(options)),
+  validatorDecorator(options),
+  swaggerDecorator(options, { type: Boolean }),
+])
 
 export const NotColumn = (
   options: OpenAPIOptions<any> = {},
