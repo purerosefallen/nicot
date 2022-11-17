@@ -173,6 +173,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       try {
         const savedEnt = await repo.save(ent as DeepPartial<T>);
         await savedEnt.afterCreate();
+        return savedEnt;
       } catch (e) {
         this.log.error(
           `Failed to create entity ${JSON.stringify(ent)}: ${e.toString()}`,

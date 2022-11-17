@@ -64,7 +64,7 @@
     "@nestjs/swagger": "^6.0.4",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.13.2",
-    "typeorm": "^0.3.7"
+    "typeorm": "^0.3.10"
   },
   "dependencies": {
     "lodash": "^4.17.21"

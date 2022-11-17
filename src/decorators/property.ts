@@ -158,12 +158,15 @@ export const EnumColumn = <T>(
   ]);
 };
 
-export const BoolColumn = (options: PropertyOptions<boolean> = {}): PropertyDecorator => MergePropertyDecorators([
-  Index(),
-  Column('boolean', columnDecoratorOptions(options)),
-  validatorDecorator(options),
-  swaggerDecorator(options, { type: Boolean }),
-])
+export const BoolColumn = (
+  options: PropertyOptions<boolean> = {},
+): PropertyDecorator =>
+  MergePropertyDecorators([
+    Index(),
+    Column('boolean', columnDecoratorOptions(options)),
+    validatorDecorator(options),
+    swaggerDecorator(options, { type: Boolean }),
+  ]);
 
 export const NotColumn = (
   options: OpenAPIOptions<any> = {},
