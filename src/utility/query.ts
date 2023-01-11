@@ -1,7 +1,6 @@
 import { SelectQueryBuilder } from 'typeorm';
-import { TimeBase } from '../bases/time-base';
 
-export function applyQueryProperty<T extends TimeBase>(
+export function applyQueryProperty<T>(
   obj: T,
   qb: SelectQueryBuilder<T>,
   entityName: string,
@@ -14,7 +13,7 @@ export function applyQueryProperty<T extends TimeBase>(
     qb.andWhere(`${entityName}.${field} = :${field}`, { [field]: obj[field] });
   }
 }
-export function applyQueryPropertyLike<T extends TimeBase>(
+export function applyQueryPropertyLike<T>(
   obj: T,
   qb: SelectQueryBuilder<T>,
   entityName: string,
@@ -30,7 +29,7 @@ export function applyQueryPropertyLike<T extends TimeBase>(
   }
 }
 
-export function applyQueryPropertySearch<T extends TimeBase>(
+export function applyQueryPropertySearch<T>(
   obj: T,
   qb: SelectQueryBuilder<T>,
   entityName: string,

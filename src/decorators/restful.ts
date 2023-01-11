@@ -29,11 +29,11 @@ import {
 import { CreatePipe, GetPipe, UpdatePipe } from './pipes';
 import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 
-export interface CrudFactoryOptions<T extends TimeBase> {
+export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
 }
 
-export class RestfulFactory<T extends TimeBase> {
+export class RestfulFactory<T> {
   readonly createDto: ClassType<Omit<T, keyof T>>;
   readonly updateDto: ClassType<Partial<Omit<T, keyof T>>>;
   readonly entityReturnMessageDto = ReturnMessageDto(this.entityClass);
@@ -45,10 +45,10 @@ export class RestfulFactory<T extends TimeBase> {
 
   constructor(
     public readonly entityClass: ClassType<T>,
-    private options: CrudFactoryOptions<T> = {},
+    private options: RestfulFactoryOptions<T> = {},
   ) {
     this.createDto = OmitType(this.entityClass, [
-      ...TimeBaseFields,
+      ...(TimeBaseFields as (keyof T)[]),
       ...(options.fieldsToOmit || []),
     ]);
     this.updateDto = PartialType(this.createDto);
