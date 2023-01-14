@@ -1,7 +1,16 @@
 import { Expose } from 'class-transformer';
 import { IsOptional } from 'class-validator';
+import { Metadata } from '../utility/metadata';
 import { MergePropertyDecorators } from './merge';
 
 export const NotWritable = () =>
-  MergePropertyDecorators([Expose({ groups: ['r'] }), IsOptional()]);
-export const NotChangeable = () => Expose({ groups: ['r', 'c'] });
+  MergePropertyDecorators([
+    Expose({ groups: ['r'] }),
+    IsOptional(),
+    Metadata.set('notWritable', true, 'notWritableFields'),
+  ]);
+export const NotChangeable = () =>
+  MergePropertyDecorators([
+    Expose({ groups: ['r', 'c'] }),
+    Metadata.set('notChangeable', true, 'notChangeableFields'),
+  ]);
