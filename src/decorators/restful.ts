@@ -53,7 +53,7 @@ export class RestfulFactory<T> {
     this.fieldsToOmit,
   ) as ClassType<T>;
   readonly createDto = OmitType(
-    this.entityClass,
+    this.basicDto,
     getSpecificFields(this.entityClass, 'notWritable') as (keyof T)[],
   ) as ClassType<T>;
   readonly importDto = ImportDataDto(this.entityClass);
