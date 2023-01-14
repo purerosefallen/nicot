@@ -31,6 +31,7 @@ import { CreatePipe, GetPipe, UpdatePipe } from './pipes';
 import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import _ from 'lodash';
 import { getSpecificFields } from '../utility/metadata';
+import { RenameClass } from '../utility/rename-class';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -52,17 +53,26 @@ export class RestfulFactory<T> {
     this.entityClass,
     this.fieldsToOmit,
   ) as ClassType<T>;
-  readonly createDto = OmitType(
-    this.basicDto,
-    getSpecificFields(this.entityClass, 'notWritable') as (keyof T)[],
+  readonly createDto = RenameClass(
+    OmitType(
+      this.basicDto,
+      getSpecificFields(this.entityClass, 'notWritable') as (keyof T)[],
+    ),
+    `Create${this.entityClass.name}Dto`,
   ) as ClassType<T>;
   readonly importDto = ImportDataDto(this.entityClass);
-  readonly findAllDto = PartialType(this.basicDto) as ClassType<T>;
-  readonly updateDto = PartialType(
-    OmitType(
-      this.createDto,
-      getSpecificFields(this.entityClass, 'notChangeable') as (keyof T)[],
+  readonly findAllDto = RenameClass(
+    PartialType(this.basicDto),
+    `Find${this.entityClass.name}Dto`,
+  ) as ClassType<T>;
+  readonly updateDto = RenameClass(
+    PartialType(
+      OmitType(
+        this.createDto,
+        getSpecificFields(this.entityClass, 'notChangeable') as (keyof T)[],
+      ),
     ),
+    `Update${this.entityClass.name}Dto`,
   ) as ClassType<T>;
   // eslint-disable-next-line @typescript-eslint/ban-types
   readonly idType: Function = Reflect.getMetadata(
