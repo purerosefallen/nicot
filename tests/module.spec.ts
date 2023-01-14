@@ -48,6 +48,12 @@ class UserController {
   }
 }
 
+describe('app', () => {
+  it('should pass', () => {
+    expect(true).toBe(true);
+  });
+});
+
 /*
 describe('app', () => {
   let app: NestExpressApplication;

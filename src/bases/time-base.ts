@@ -55,9 +55,3 @@ export class TimeBase
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   async beforeUpdate(): Promise<void> {}
 }
-
-export const TimeBaseFields: (keyof TimeBase)[] = [
-  'createTime',
-  'updateTime',
-  'deleteTime',
-];

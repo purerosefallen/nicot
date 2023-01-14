@@ -1,5 +1,6 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
+import { RestfulFactory } from '../src/decorators';
 import { Gender, User, User2 } from './utility/user';
 
 describe('entity', () => {
@@ -39,5 +40,10 @@ describe('entity', () => {
         plainToInstance(User2, { name: 'John', age: 20, gender: Gender.M }),
       ),
     ).not.toEqual([]);
+  });
+
+  it('should set omit fields', () => {
+    const factory = new RestfulFactory(User);
+    expect(factory.fieldsToOmit.includes('createTime')).toBe(true);
   });
 });

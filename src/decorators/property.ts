@@ -21,6 +21,7 @@ import { ColumnWithWidthOptions } from 'typeorm/decorator/options/ColumnWithWidt
 import { ColumnNumericOptions } from 'typeorm/decorator/options/ColumnNumericOptions';
 import { Exclude } from 'class-transformer';
 import { BigintTransformer } from '../utility/bigint';
+import { Metadata } from '../utility/metadata';
 
 export interface OpenAPIOptions<T> {
   description?: string;
@@ -171,4 +172,8 @@ export const BoolColumn = (
 export const NotColumn = (
   options: OpenAPIOptions<any> = {},
 ): PropertyDecorator =>
-  MergePropertyDecorators([Exclude(), swaggerDecorator(options)]);
+  MergePropertyDecorators([
+    Exclude(),
+    swaggerDecorator(options),
+    Metadata.set('notColumn', true, 'notColumnFields'),
+  ]);

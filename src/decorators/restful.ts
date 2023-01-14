@@ -15,7 +15,6 @@ import {
 } from '../dto';
 import { MergeMethodDecorators } from './merge';
 import { ClassType } from '../utility/insert-field';
-import { TimeBase, TimeBaseFields } from '../bases';
 import {
   ApiBody,
   ApiCreatedResponse,
@@ -28,36 +27,39 @@ import {
 } from '@nestjs/swagger';
 import { CreatePipe, GetPipe, UpdatePipe } from './pipes';
 import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
+import _ from 'lodash';
+import { reflector } from '../utility/metadata';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
 }
 
 export class RestfulFactory<T> {
-  readonly createDto: ClassType<Omit<T, keyof T>>;
-  readonly updateDto: ClassType<Partial<Omit<T, keyof T>>>;
   readonly entityReturnMessageDto = ReturnMessageDto(this.entityClass);
   readonly entityArrayReturnMessageDto = PaginatedReturnMessageDto(
     this.entityClass,
   );
+  readonly fieldsToOmit: (keyof T)[] = _.uniq([
+    ...(reflector
+      .getArray('notColumnFields', this.entityClass)
+      .filter((field) =>
+        reflector.get('notColumn', this.entityClass, field),
+      ) as (keyof T)[]),
+    ...(this.options.fieldsToOmit || []),
+  ]);
+  readonly createDto = OmitType(this.entityClass, this.fieldsToOmit);
+  readonly updateDto = PartialType(this.createDto);
   // eslint-disable-next-line @typescript-eslint/ban-types
-  readonly idType: Function;
+  readonly idType: Function = Reflect.getMetadata(
+    'design:type',
+    this.entityClass.prototype,
+    'id',
+  );
 
   constructor(
     public readonly entityClass: ClassType<T>,
     private options: RestfulFactoryOptions<T> = {},
-  ) {
-    this.createDto = OmitType(this.entityClass, [
-      ...(TimeBaseFields as (keyof T)[]),
-      ...(options.fieldsToOmit || []),
-    ]);
-    this.updateDto = PartialType(this.createDto);
-    this.idType = Reflect.getMetadata(
-      'design:type',
-      this.entityClass.prototype,
-      'id',
-    );
-  }
+  ) {}
 
   create(extras: Partial<OperationObject> = {}): MethodDecorator {
     return MergeMethodDecorators([
