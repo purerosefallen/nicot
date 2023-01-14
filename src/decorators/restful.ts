@@ -10,6 +10,8 @@ import {
 } from '@nestjs/common';
 import {
   BlankReturnMessageDto,
+  ImportDataDto,
+  ImportEntryDto,
   PaginatedReturnMessageDto,
   ReturnMessageDto,
 } from '../dto';
@@ -39,6 +41,9 @@ export class RestfulFactory<T> {
   readonly entityArrayReturnMessageDto = PaginatedReturnMessageDto(
     this.entityClass,
   );
+  readonly importReturnMessageDto = ReturnMessageDto(
+    ImportEntryDto(this.entityClass),
+  );
   readonly fieldsToOmit = _.uniq([
     ...(getSpecificFields(this.entityClass, 'notColumn') as (keyof T)[]),
     ...(this.options.fieldsToOmit || []),
@@ -51,6 +56,7 @@ export class RestfulFactory<T> {
     this.entityClass,
     getSpecificFields(this.entityClass, 'notWritable') as (keyof T)[],
   ) as ClassType<T>;
+  readonly importDto = ImportDataDto(this.createDto);
   readonly findAllDto = PartialType(this.basicDto) as ClassType<T>;
   readonly updateDto = PartialType(
     OmitType(
@@ -144,6 +150,18 @@ export class RestfulFactory<T> {
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiNoContentResponse({ type: BlankReturnMessageDto }),
+    ]);
+  }
+
+  import(extras: Partial<OperationObject> = {}): MethodDecorator {
+    return MergeMethodDecorators([
+      Post('import'),
+      ApiOperation({
+        summary: `Import ${this.entityClass.name}`,
+        ...extras,
+      }),
+      ApiBody({ type: this.importDto }),
+      ApiCreatedResponse({ type: this.importReturnMessageDto }),
     ]);
   }
 }
