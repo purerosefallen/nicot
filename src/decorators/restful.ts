@@ -56,7 +56,7 @@ export class RestfulFactory<T> {
     this.entityClass,
     getSpecificFields(this.entityClass, 'notWritable') as (keyof T)[],
   ) as ClassType<T>;
-  readonly importDto = ImportDataDto(this.createDto);
+  readonly importDto = ImportDataDto(this.entityClass);
   readonly findAllDto = PartialType(this.basicDto) as ClassType<T>;
   readonly updateDto = PartialType(
     OmitType(
@@ -160,7 +160,7 @@ export class RestfulFactory<T> {
         summary: `Import ${this.entityClass.name}`,
         ...extras,
       }),
-      ApiBody({ type: this.importDto }),
+      ApiBody({ type: ImportDataDto(this.createDto) }),
       ApiCreatedResponse({ type: this.importReturnMessageDto }),
     ]);
   }
