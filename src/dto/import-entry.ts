@@ -37,7 +37,7 @@ export function ImportDataDto<C extends AnyClass>(type: C) {
   const dtoClass = InsertField(
     ImportDataBaseDto,
     {
-      entry: { type: [type], options: { description: 'Import data' } },
+      data: { type: [type], options: { description: 'Import data' } },
     },
     `${getClassFromClassOrArray(type).name}ImportData`,
   );
