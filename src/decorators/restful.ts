@@ -89,7 +89,7 @@ export class RestfulFactory<T> {
   }
 
   createParam() {
-    return Body(CreatePipe);
+    return Body(CreatePipe());
   }
 
   findOne(extras: Partial<OperationObject> = {}): MethodDecorator {
@@ -121,7 +121,7 @@ export class RestfulFactory<T> {
   }
 
   findAllParam() {
-    return Query(GetPipe);
+    return Query(GetPipe());
   }
 
   update(extras: Partial<OperationObject> = {}): MethodDecorator {
@@ -138,7 +138,7 @@ export class RestfulFactory<T> {
   }
 
   updateParam() {
-    return Body(UpdatePipe);
+    return Body(UpdatePipe());
   }
 
   delete(extras: Partial<OperationObject> = {}): MethodDecorator {
