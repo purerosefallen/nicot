@@ -41,6 +41,6 @@ export function ImportDataDto<C extends AnyClass>(type: C) {
     },
     `${getClassFromClassOrArray(type).name}ImportData`,
   );
-  Type(() => dtoClass)(dtoClass.prototype, 'data');
+  Type(() => type)(dtoClass.prototype, 'data');
   return dtoClass;
 }
