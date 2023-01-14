@@ -89,7 +89,8 @@ Would also register proper OpenAPI documentation for the controller.
 
 ```ts
 const dec = new RestfulFactory(User);
-class UpdateUserDto extends dec.updateDto {} // to extract type and class
+class FindAllUsersDto extends dec.findAllDto {} // to extract type and class
+class UpdateUserDto extends dec.updateDto {}
 
 @Controller('user')
 export class UserController {
@@ -106,7 +107,7 @@ export class UserController {
   }
 
   @dec.findAll() // GET /
-  findAll(@dec.findAllParam() user: UpdateUserDto) {
+  findAll(@dec.findAllParam() user: FindAllUsersDto) {
     return this.userService.findAll(user);
   }
 
