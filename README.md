@@ -22,46 +22,53 @@ Those decorators would all decorate the following, with the SAME settings.
 @Entity()
 export class User extends IdBase() {
   @Index()
+  @QueryLike() // queries as 'where name LIKE :name%'
   @StringColumn(5, {
     required: true,
     description: 'User name',
   })
   name: string;
 
+  @QueryEqual() // queries as 'where age = :age'
   @IntColumn('int', { unsigned: true, description: 'User age', default: 20 })
   age: number;
 
   @EnumColumn(Gender, { description: 'User gender' })
   gender: Gender;
-  
+
   @NotColumn()
   somethingElse: any; // Would not come from client input, and would not go into OpenAPI document.
-  
+
   // possible optional override operations
-  
+
   override isValidInCreate() { // Custom before-create check.
     if (!this.name.length) {
       return 'Name cannot be empty!';
     }
   }
-  
+
   override isValidInUpdate() { // Custom before-update check.
     if (this.name && !this.name.length) {
       return 'Name cannot be empty!';
     }
   }
-  
+
   override async beforeCreate() {
     this.name = this.name.toLowerCase(); // Do something before create.
   }
-  
+
   override async afterCreate() {
     this.name = this.name.toUpperCase(); // Do something after create before sending to user.
   }
-  
-  override async beforeGet() {}
-  override async afterGet() {}
-  override async beforeUpdate() {}
+
+  override async beforeGet() {
+  }
+
+  override async afterGet() {
+  }
+
+  override async beforeUpdate() {
+  }
 }
 ```
 
