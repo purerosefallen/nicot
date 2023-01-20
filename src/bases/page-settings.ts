@@ -2,6 +2,7 @@ import { NotWritable } from '../decorators';
 import { SelectQueryBuilder } from 'typeorm';
 import { IsInt, IsPositive } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { reflector } from '../utility/metadata';
 
 export interface PageSettingsWise {
   pageCount: number;
@@ -15,6 +16,13 @@ export interface PageSettingsFactory {
 export interface QueryWise<T> {
   applyQuery(qb: SelectQueryBuilder<T>, entityName: string): void;
 }
+
+export type QueryCond = <T extends PageSettingsDto>(
+  obj: T,
+  qb: SelectQueryBuilder<T>,
+  entityName: string,
+  key: keyof T & string,
+) => any;
 
 export class PageSettingsDto
   implements PageSettingsWise, PageSettingsFactory, QueryWise<PageSettingsDto>
@@ -61,6 +69,13 @@ export class PageSettingsDto
   }
 
   applyQuery(qb: SelectQueryBuilder<PageSettingsDto>, entityName: string) {
+    const queryFields = reflector.getArray('queryConditionFields', this);
+    for (const field of queryFields) {
+      const condition = reflector.get('queryCondition', this, field);
+      if (condition) {
+        condition(this, qb, entityName, field as keyof PageSettingsDto);
+      }
+    }
     qb.take(this.getRecordsPerPage()).skip(this.getStartingFrom());
   }
 }

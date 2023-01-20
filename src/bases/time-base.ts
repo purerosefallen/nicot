@@ -1,4 +1,9 @@
-import { CreateDateColumn, DeleteDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  CreateDateColumn,
+  DeleteDateColumn,
+  SelectQueryBuilder,
+  UpdateDateColumn,
+} from 'typeorm';
 import { NotColumn } from '../decorators';
 import { PageSettingsDto } from './page-settings';
 

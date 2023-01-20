@@ -1,14 +1,24 @@
 import { MetadataSetter, Reflector } from 'typed-reflector';
+import { QueryCond } from '../bases';
 
-export interface SpecificFields {
+interface SpecificFields {
   notColumn: boolean;
   notWritable: boolean;
   notChangeable: boolean;
 }
-type MetadataArrayMap = { [K in keyof SpecificFields as `${K}Fields`]: string };
 
-export const Metadata = new MetadataSetter<SpecificFields, MetadataArrayMap>();
-export const reflector = new Reflector<SpecificFields, MetadataArrayMap>();
+interface MetadataMap extends SpecificFields {
+  queryCondition: QueryCond;
+}
+
+type FieldsMap = {
+  [K in keyof MetadataMap as `${K}Fields`]: string;
+};
+
+type MetadataArrayMap = FieldsMap;
+
+export const Metadata = new MetadataSetter<MetadataMap, MetadataArrayMap>();
+export const reflector = new Reflector<MetadataMap, MetadataArrayMap>();
 
 export function getSpecificFields(obj: any, type: keyof SpecificFields) {
   return reflector
