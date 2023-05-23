@@ -23,3 +23,9 @@ export const UpdatePipe = () =>
     skipNullProperties: true,
     skipUndefinedProperties: true,
   });
+
+export const DataPipe = () =>
+  new ValidationPipe({
+    transform: true,
+    transformOptions: { enableImplicitConversion: true },
+  });
