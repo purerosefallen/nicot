@@ -36,10 +36,7 @@ export const Inner = (name: string): RelationDef => {
 
 export type ValidCrudEntity<T> = Record<string, any> & {
   id: any;
-} & QueryWise<T> &
-  DeletionWise &
-  EntityHooks &
-  PageSettingsFactory;
+} & Partial<QueryWise<T> & DeletionWise & EntityHooks & PageSettingsFactory>;
 
 export interface CrudOptions<T extends ValidCrudEntity<T>> {
   relations?: (string | RelationDef)[];

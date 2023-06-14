@@ -2,6 +2,7 @@ import {
   Body,
   Delete,
   Get,
+  HttpCode,
   Param,
   ParseIntPipe,
   Patch,
@@ -89,12 +90,13 @@ export class RestfulFactory<T> {
   create(extras: Partial<OperationObject> = {}): MethodDecorator {
     return MergeMethodDecorators([
       Post(),
+      HttpCode(200),
       ApiOperation({
         summary: `Create a new ${this.entityClass.name}`,
         ...extras,
       }),
       ApiBody({ type: this.createDto }),
-      ApiCreatedResponse({ type: this.entityReturnMessageDto }),
+      ApiOkResponse({ type: this.entityReturnMessageDto }),
     ]);
   }
 
@@ -137,6 +139,7 @@ export class RestfulFactory<T> {
   update(extras: Partial<OperationObject> = {}): MethodDecorator {
     return MergeMethodDecorators([
       Patch(':id'),
+      HttpCode(200),
       ApiOperation({
         summary: `Update a ${this.entityClass.name} by id`,
         ...extras,
@@ -154,12 +157,13 @@ export class RestfulFactory<T> {
   delete(extras: Partial<OperationObject> = {}): MethodDecorator {
     return MergeMethodDecorators([
       Delete(':id'),
+      HttpCode(200),
       ApiOperation({
         summary: `Delete a ${this.entityClass.name} by id`,
         ...extras,
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
-      ApiNoContentResponse({ type: BlankReturnMessageDto }),
+      ApiOkResponse({ type: BlankReturnMessageDto }),
     ]);
   }
 
