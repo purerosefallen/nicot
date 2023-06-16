@@ -140,10 +140,12 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     return result;
   }
 
-  async create(ent: T, beforeCreate?: (repo: Repository<T>) => Promise<void>) {
-    if (!ent) {
+  async create(_ent: T, beforeCreate?: (repo: Repository<T>) => Promise<void>) {
+    if (!_ent) {
       throw new BlankReturnMessageDto(400, 'Invalid entity').toException();
     }
+    const ent = new this.entityClass();
+    Object.assign(ent, _ent);
     const invalidReason = ent.isValidInCreate();
     if (invalidReason) {
       throw new BlankReturnMessageDto(400, invalidReason).toException();
