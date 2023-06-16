@@ -8,6 +8,7 @@ export const NotWritable = () =>
     Expose({ groups: ['r'] }),
     IsOptional(),
     Metadata.set('notWritable', true, 'notWritableFields'),
+    Metadata.set('notChangeable', true, 'notChangeableFields'),
   ]);
 export const NotChangeable = () =>
   MergePropertyDecorators([
