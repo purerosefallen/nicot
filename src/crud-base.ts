@@ -257,7 +257,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     extraQuery: (qb: SelectQueryBuilder<T>) => void = () => {},
   ) {
-    const query = this.queryBuilder();
+    const query = this.queryBuilder().where('1 = 1');
     const newEnt = new this.entityClass();
     if (ent) {
       Object.assign(newEnt, ent);
