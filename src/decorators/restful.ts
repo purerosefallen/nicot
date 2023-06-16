@@ -19,9 +19,10 @@ import {
 import { MergeMethodDecorators } from './merge';
 import { ClassType } from '../utility/insert-field';
 import {
+  ApiBadRequestResponse,
   ApiBody,
-  ApiCreatedResponse,
-  ApiNoContentResponse,
+  ApiInternalServerErrorResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
@@ -97,6 +98,10 @@ export class RestfulFactory<T> {
       }),
       ApiBody({ type: this.createDto }),
       ApiOkResponse({ type: this.entityReturnMessageDto }),
+      ApiBadRequestResponse({
+        type: BlankReturnMessageDto,
+        description: `The ${this.entityClass.name} is not valid`,
+      }),
     ]);
   }
 
@@ -113,6 +118,10 @@ export class RestfulFactory<T> {
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiOkResponse({ type: this.entityReturnMessageDto }),
+      ApiNotFoundResponse({
+        type: BlankReturnMessageDto,
+        description: `The ${this.entityClass.name} with the given id was not found`,
+      }),
     ]);
   }
 
@@ -147,6 +156,18 @@ export class RestfulFactory<T> {
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiBody({ type: this.updateDto }),
       ApiOkResponse({ type: BlankReturnMessageDto }),
+      ApiNotFoundResponse({
+        type: BlankReturnMessageDto,
+        description: `The ${this.entityClass.name} with the given id was not found`,
+      }),
+      ApiBadRequestResponse({
+        type: BlankReturnMessageDto,
+        description: `The ${this.entityClass.name} is not valid`,
+      }),
+      ApiInternalServerErrorResponse({
+        type: BlankReturnMessageDto,
+        description: 'Internal error',
+      }),
     ]);
   }
 
@@ -164,6 +185,14 @@ export class RestfulFactory<T> {
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiOkResponse({ type: BlankReturnMessageDto }),
+      ApiNotFoundResponse({
+        type: BlankReturnMessageDto,
+        description: `The ${this.entityClass.name} with the given id was not found`,
+      }),
+      ApiInternalServerErrorResponse({
+        type: BlankReturnMessageDto,
+        description: 'Internal error',
+      }),
     ]);
   }
 
@@ -175,7 +204,11 @@ export class RestfulFactory<T> {
         ...extras,
       }),
       ApiBody({ type: ImportDataDto(this.createDto) }),
-      ApiCreatedResponse({ type: this.importReturnMessageDto }),
+      ApiOkResponse({ type: this.importReturnMessageDto }),
+      ApiInternalServerErrorResponse({
+        type: BlankReturnMessageDto,
+        description: 'Internal error',
+      }),
     ]);
   }
 }

@@ -182,7 +182,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         throw new BlankReturnMessageDto(500, 'Internal error').toException();
       }
     });
-    return new this.entityReturnMessageDto(201, 'success', savedEnt);
+    return new this.entityReturnMessageDto(200, 'success', savedEnt);
   }
 
   get entityAliasName() {
@@ -346,7 +346,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         `${this.entityName} ID ${id} not found.`,
       ).toException();
     }
-    return new BlankReturnMessageDto(204, 'success');
+    return new BlankReturnMessageDto(200, 'success');
   }
 
   async importEntities(
@@ -381,7 +381,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       ...data.results.map((e) => ({ entry: e, result: 'OK' })),
     ];
     return new this.importReturnMessageDto(
-      201,
+      200,
       'success',
       results.map((r) => {
         const entry = new this.importEntryDto();
