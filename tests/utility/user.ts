@@ -15,9 +15,17 @@ export enum Gender {
   M = 'M',
 }
 
+export class Page {
+  id: number;
+  name: string;
+  book: Book;
+}
+
 export class Book {
   id: number;
   name: string;
+  user: User;
+  pages: Page[];
 }
 
 @Entity()

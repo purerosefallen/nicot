@@ -7,22 +7,31 @@ export type RecursiveKeyOf<TObj extends Record<string, any>> = {
   >;
 }[keyof TObj & string];
 
-type RecursiveKeyOfInner<TObj extends Record<string, any>> = {
+type RecursiveKeyOfInner<
+  TObj extends Record<string, any>,
+  UsedTypes = never,
+> = {
   [TKey in keyof TObj & string]: RecursiveKeyOfHandleValue<
     TObj[TKey],
-    `.${TKey}`
+    `.${TKey}`,
+    UsedTypes
   >;
 }[keyof TObj & string];
 
-type RecursiveKeyOfHandleValue<TValue, Text extends string> = TValue extends
+type RecursiveKeyOfHandleValue<
+  TValue,
+  Text extends string,
+  UsedTypes = never,
+> = TValue extends
   | Function
   | ((...args: any[]) => any)
   | (new (...args: any[]) => any)
+  | UsedTypes
   ? never
   : TValue extends Date | string | number | boolean
   ? never // Text
   : TValue extends (infer TItem)[]
-  ? Text | `${Text}${RecursiveKeyOfInner<TItem>}`
+  ? Text | `${Text}${RecursiveKeyOfInner<TItem, UsedTypes | TItem>}`
   : TValue extends Record<string, any>
-  ? Text | `${Text}${RecursiveKeyOfInner<TValue>}`
+  ? Text | `${Text}${RecursiveKeyOfInner<TValue, UsedTypes | TValue>}`
   : never; // Text;
