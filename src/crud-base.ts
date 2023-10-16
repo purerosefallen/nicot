@@ -23,14 +23,15 @@ import { ConsoleLogger } from '@nestjs/common';
 import { camelCase } from 'typeorm/util/StringUtils';
 import _ from 'lodash';
 import { ClassType } from './utility/insert-field';
+import { RecursiveKeyOf } from './utility/recursive-key-of';
 
 export type EntityId<T extends { id: any }> = T['id'];
-export interface RelationDef {
-  name: string;
+export interface RelationDef<T> {
+  name: T;
   inner?: boolean;
 }
 
-export const Inner = (name: string): RelationDef => {
+export const Inner = <T>(name: T): RelationDef<T> => {
   return { name, inner: true };
 };
 
@@ -39,7 +40,7 @@ export type ValidCrudEntity<T> = Record<string, any> & {
 } & Partial<QueryWise<T> & DeletionWise & EntityHooks & PageSettingsFactory>;
 
 export interface CrudOptions<T extends ValidCrudEntity<T>> {
-  relations?: (string | RelationDef)[];
+  relations?: (RecursiveKeyOf<T> | RelationDef<RecursiveKeyOf<T>>)[];
   extraGetQuery?: (qb: SelectQueryBuilder<T>) => void;
   hardDelete?: boolean;
 }
@@ -52,7 +53,10 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   readonly entityPaginatedReturnMessageDto = PaginatedReturnMessageDto(
     this.entityClass,
   );
-  readonly entityRelations: (string | RelationDef)[];
+  readonly entityRelations: (
+    | RecursiveKeyOf<T>
+    | RelationDef<RecursiveKeyOf<T>>
+  )[];
   readonly extraGetQuery: (qb: SelectQueryBuilder<T>) => void;
   readonly log = new ConsoleLogger(`${this.entityClass.name}Service`);
 
@@ -191,7 +195,10 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     return camelCase(this.entityName);
   }
 
-  _applyRelationToQuery(qb: SelectQueryBuilder<T>, relation: RelationDef) {
+  _applyRelationToQuery(
+    qb: SelectQueryBuilder<T>,
+    relation: RelationDef<RecursiveKeyOf<T>>,
+  ) {
     const { name } = relation;
     const relationUnit = name.split('.');
     const base =
@@ -209,7 +216,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   _applyRelationsToQuery(qb: SelectQueryBuilder<T>) {
     for (const relation of this.entityRelations) {
       if (typeof relation === 'string') {
-        this._applyRelationToQuery(qb, { name: relation });
+        this._applyRelationToQuery(qb, { name: relation as any });
       } else {
         this._applyRelationToQuery(qb, relation);
       }

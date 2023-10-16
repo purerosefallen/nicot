@@ -1,12 +1,10 @@
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Controller, Injectable } from '@nestjs/common';
 import { CrudService } from '../src/crud-base';
-import { Gender, User } from './utility/user';
+import { User } from './utility/user';
 import { RestfulFactory } from '../src/decorators';
-import { Test } from '@nestjs/testing';
-import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import request from 'supertest';
 
 @Injectable()
 class UserService extends CrudService(User) {

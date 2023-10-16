@@ -1,10 +1,23 @@
 import { Entity, Index } from 'typeorm';
-import { DateColumn, EnumColumn, IntColumn, NotChangeable, NotColumn, NotWritable, StringColumn } from '../../src/decorators';
+import {
+  DateColumn,
+  EnumColumn,
+  IntColumn,
+  NotChangeable,
+  NotColumn,
+  NotWritable,
+  StringColumn,
+} from '../../src/decorators';
 import { IdBase, StringIdBase } from '../../src/bases';
 
 export enum Gender {
   F = 'F',
   M = 'M',
+}
+
+export class Book {
+  id: number;
+  name: string;
 }
 
 @Entity()
@@ -28,6 +41,8 @@ export class User extends IdBase() {
 
   @NotColumn()
   birthday: Date;
+
+  books: Book[];
 }
 
 @Entity()
