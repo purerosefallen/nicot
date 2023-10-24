@@ -19,7 +19,7 @@ import {
 } from 'typeorm/driver/types/ColumnTypes';
 import { ColumnWithWidthOptions } from 'typeorm/decorator/options/ColumnWithWidthOptions';
 import { ColumnNumericOptions } from 'typeorm/decorator/options/ColumnNumericOptions';
-import { Exclude } from 'class-transformer';
+import { Exclude, Transform } from 'class-transformer';
 import { BigintTransformer } from '../utility/bigint';
 import { Metadata } from '../utility/metadata';
 
@@ -164,6 +164,13 @@ export const BoolColumn = (
 ): PropertyDecorator =>
   MergePropertyDecorators([
     Index(),
+    Transform((v) => {
+      const trueValues = ['true', '1', 'yes', 'on', true, 1];
+      const falseValues = ['false', '0', 'no', 'off', false, 0];
+      if (trueValues.indexOf(v.value) !== -1) return true;
+      if (falseValues.indexOf(v.value) !== -1) return false;
+      return undefined;
+    }),
     Column('boolean', columnDecoratorOptions(options)),
     validatorDecorator(options),
     swaggerDecorator(options, { type: Boolean }),
