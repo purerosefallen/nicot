@@ -1,6 +1,7 @@
 import { QueryCond } from '../bases';
 import { Metadata } from '../utility/metadata';
 import {
+  applyQueryMatchBoolean,
   applyQueryProperty,
   applyQueryPropertyLike,
   applyQueryPropertySearch,
@@ -15,3 +16,5 @@ export const QuerySearch = () => QueryCondition(applyQueryPropertySearch);
 
 export const QueryEqualZeroNullable = () =>
   QueryCondition(applyQueryPropertyZeroNullable);
+
+export const QueryMatchBoolean = () => QueryCondition(applyQueryMatchBoolean);
