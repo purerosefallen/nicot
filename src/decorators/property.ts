@@ -138,6 +138,17 @@ export const DateColumn = (
   return MergePropertyDecorators([
     Column('timestamp', columnDecoratorOptions(options)),
     IsDate(),
+    Transform(
+      (v) => {
+        if (v.value == null) return v.value;
+        if (v.value instanceof Date) return v.value;
+        if (typeof v.value === 'number') return new Date(v.value * 1000);
+        return new Date(v.value);
+      },
+      {
+        toClassOnly: true,
+      },
+    ),
     validatorDecorator(options),
     swaggerDecorator(options, { type: Date }),
   ]);
