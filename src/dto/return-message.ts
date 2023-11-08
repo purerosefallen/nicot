@@ -121,7 +121,7 @@ export function PaginatedReturnMessageDto<T extends AnyClass>(
   data: InstanceType<T>[],
   total: number,
   pageSettings: PageSettingsWise,
-) => GenericPaginatedReturnMessageDto<InstanceType<T>[]> {
+) => GenericPaginatedReturnMessageDto<InstanceType<T>> {
   return InsertField(
     GenericPaginatedReturnMessageDto,
     {
