@@ -25,7 +25,9 @@ export interface InsertOptions<C extends ClassOrArray = ClassOrArray> {
 type TypeFromInsertOptions<O extends InsertOptions> = O extends InsertOptions<
   infer C
 >
-  ? ParseType<C>
+  ?
+      | ParseType<C>
+      | (O extends { options: { required: true } } ? never : undefined)
   : never;
 
 export function InsertField<

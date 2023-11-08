@@ -6,6 +6,7 @@ import {
   ClassOrArray,
   getClassFromClassOrArray,
   InsertField,
+  ParseType,
 } from '../utility/insert-field';
 
 export interface BlankReturnMessage {
@@ -73,7 +74,13 @@ export class GenericReturnMessageDto<T>
   }
 }
 
-export function ReturnMessageDto<T extends ClassOrArray>(type: T) {
+export function ReturnMessageDto<T extends ClassOrArray>(
+  type: T,
+): new (
+  statusCode: number,
+  message: string,
+  data: ParseType<T>,
+) => GenericReturnMessageDto<ParseType<T>> {
   return InsertField(
     GenericReturnMessageDto,
     {
@@ -106,7 +113,15 @@ export class GenericPaginatedReturnMessageDto<T>
   }
 }
 
-export function PaginatedReturnMessageDto<T extends AnyClass>(type: T) {
+export function PaginatedReturnMessageDto<T extends AnyClass>(
+  type: T,
+): new (
+  statusCode: number,
+  message: string,
+  data: InstanceType<T>[],
+  total: number,
+  pageSettings: PageSettingsWise,
+) => GenericPaginatedReturnMessageDto<InstanceType<T>[]> {
   return InsertField(
     GenericPaginatedReturnMessageDto,
     {
@@ -124,5 +139,5 @@ export function PaginatedReturnMessageDto<T extends AnyClass>(type: T) {
 
 export class StringReturnMessageDto extends GenericReturnMessageDto<string> {
   @ApiProperty({ description: 'Return data.', type: String, required: false })
-  data?: string;
+  data: string;
 }
