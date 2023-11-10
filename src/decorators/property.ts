@@ -36,7 +36,7 @@ function swaggerDecorator(
 ) {
   return ApiProperty({
     default: options.default,
-    required: options.required && options.default == null,
+    required: !!(options.required && options.default == null),
     example: options.default,
     description: options.description,
     ...injected,
@@ -192,6 +192,9 @@ export const NotColumn = (
 ): PropertyDecorator =>
   MergePropertyDecorators([
     Exclude(),
-    swaggerDecorator(options),
+    swaggerDecorator({
+      required: false,
+      ...options,
+    }),
     Metadata.set('notColumn', true, 'notColumnFields'),
   ]);
