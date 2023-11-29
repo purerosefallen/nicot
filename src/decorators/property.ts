@@ -143,6 +143,9 @@ export const DateColumn = (
         if (v.value == null) return v.value;
         if (v.value instanceof Date) return v.value;
         if (typeof v.value === 'number') return new Date(v.value * 1000);
+        if (typeof v.value === 'string' && v.value.match(/^\d+$/)) {
+          return new Date(parseInt(v.value, 10) * 1000);
+        }
         return new Date(v.value);
       },
       {
