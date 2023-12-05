@@ -15,3 +15,6 @@ export const NotChangeable = () =>
     Expose({ groups: ['r', 'c'] }),
     Metadata.set('notChangeable', true, 'notChangeableFields'),
   ]);
+
+export const NotQueryable = () =>
+  Metadata.set('notQueryable', true, 'notQueryableFields');

@@ -5,6 +5,7 @@ interface SpecificFields {
   notColumn: boolean;
   notWritable: boolean;
   notChangeable: boolean;
+  notQueryable: boolean;
 }
 
 interface MetadataMap extends SpecificFields {

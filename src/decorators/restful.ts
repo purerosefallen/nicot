@@ -64,7 +64,12 @@ export class RestfulFactory<T> {
   ) as ClassType<T>;
   readonly importDto = ImportDataDto(this.entityClass);
   readonly findAllDto = RenameClass(
-    PartialType(this.basicDto),
+    PartialType(
+      OmitType(
+        this.basicDto,
+        getSpecificFields(this.entityClass, 'notQueryable') as (keyof T)[],
+      ),
+    ),
     `Find${this.entityClass.name}Dto`,
   ) as ClassType<T>;
   readonly updateDto = RenameClass(
