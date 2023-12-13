@@ -28,10 +28,23 @@ export type EntityId<T extends { id: any }> = T['id'];
 export interface RelationDef {
   name: string;
   inner?: boolean;
+  extraCondition?: string;
+  extraConditionFields?: Record<string, any>;
+  noSelect?: boolean;
 }
 
-export const Inner = (name: string): RelationDef => {
-  return { name, inner: true };
+export const Relation = (
+  name: string,
+  options: Omit<RelationDef, 'name'> = {},
+): RelationDef => {
+  return { name, inner: false, ...options };
+};
+
+export const Inner = (
+  name: string,
+  options: Omit<RelationDef, 'name'> = {},
+): RelationDef => {
+  return Relation(name, { inner: true, ...options });
 };
 
 export type ValidCrudEntity<T> = Record<string, any> & {
@@ -200,10 +213,16 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         : relationUnit.slice(0, relationUnit.length - 1).join('_');
     const property = relationUnit[relationUnit.length - 1];
     const properyAlias = relationUnit.join('_');
-    const methodName = relation.inner
-      ? 'innerJoinAndSelect'
-      : ('leftJoinAndSelect' as const);
-    qb[methodName](`${base}.${property}`, properyAlias);
+    const methodName = relation.inner ? 'innerJoin' : 'leftJoin';
+    if (!relation.noSelect) {
+      qb.addSelect(properyAlias);
+    }
+    qb[methodName](
+      `${base}.${property}`,
+      properyAlias,
+      relation.extraCondition || undefined,
+      relation.extraConditionFields || undefined,
+    );
   }
 
   _applyRelationsToQuery(qb: SelectQueryBuilder<T>) {
