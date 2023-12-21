@@ -44,9 +44,9 @@ export class RestfulFactory<T> {
   readonly entityArrayReturnMessageDto = PaginatedReturnMessageDto(
     this.entityClass,
   );
-  readonly importReturnMessageDto = ReturnMessageDto(
+  readonly importReturnMessageDto = ReturnMessageDto([
     ImportEntryDto(this.entityClass),
-  );
+  ]);
   readonly fieldsToOmit = _.uniq([
     ...(getSpecificFields(this.entityClass, 'notColumn') as (keyof T)[]),
     ...(this.options.fieldsToOmit || []),
