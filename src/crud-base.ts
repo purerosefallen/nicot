@@ -92,13 +92,23 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       let entsToSave = ents;
 
       if (entsWithId.length) {
-        const existingEnts = await repo.find({
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore
-          where: { id: In<string | number>(entsWithId.map((ent) => ent.id)) },
-          select: ['id', 'deleteTime'],
-          withDeleted: true,
-        });
+        const entIds = entsWithId.map((ent) => ent.id);
+        const entIdChunks = _.chunk(entIds, 65535);
+        const existingEnts = (
+          await Promise.all(
+            entIdChunks.map((chunk) =>
+              repo.find({
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                where: {
+                  id: In<string | number>(chunk),
+                },
+                select: ['id', 'deleteTime'],
+                withDeleted: true,
+              }),
+            ),
+          )
+        ).flat();
         if (existingEnts.length) {
           const existingEntsWithoutDeleteTime = existingEnts.filter(
             (ent) => ent.deleteTime == null,
@@ -136,7 +146,17 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         await beforeCreate(repo);
       }
       try {
-        const results = await repo.save(entsToSave as DeepPartial<T>[]);
+        const entChunksToSave = _.chunk(
+          entsToSave,
+          Math.floor(
+            65535 / Math.max(1, Object.keys(entsToSave[0] || {}).length),
+          ),
+        );
+        let results: T[] = [];
+        for (const entChunk of entChunksToSave) {
+          const savedChunk = await repo.save(entChunk);
+          results = results.concat(savedChunk);
+        }
         return {
           results,
           skipped,
