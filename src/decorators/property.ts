@@ -28,6 +28,7 @@ import {
   getClassFromClassOrArray,
   ParseType,
 } from '../utility/insert-field';
+import { TypeTransformer } from '../utility/type-transformer';
 
 export interface OpenAPIOptions<T> {
   description?: string;
@@ -205,7 +206,10 @@ export const JsonColumn = <C extends ClassOrArray>(
     Index(),
     Type(() => cl),
     ValidateNested(),
-    Column('jsonb', columnDecoratorOptions(options)),
+    Column('jsonb', {
+      ...columnDecoratorOptions(options),
+      transformer: new TypeTransformer(definition),
+    }),
     validatorDecorator(options),
     swaggerDecorator(options, { type: definition }),
   ]);
