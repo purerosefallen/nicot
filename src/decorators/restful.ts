@@ -37,6 +37,7 @@ import { RenameClass } from '../utility/rename-class';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
+  prefix?: string;
 }
 
 export class RestfulFactory<T> {
@@ -93,9 +94,28 @@ export class RestfulFactory<T> {
     private options: RestfulFactoryOptions<T> = {},
   ) {}
 
+  private usePrefix(
+    methodDec: (path?: string) => MethodDecorator,
+    path?: string,
+  ) {
+    if (path) {
+      if (this.options.prefix) {
+        return methodDec(`${this.options.prefix}/${path}`);
+      } else {
+        return methodDec(path);
+      }
+    } else {
+      if (this.options.prefix) {
+        return methodDec(this.options.prefix);
+      } else {
+        return methodDec();
+      }
+    }
+  }
+
   create(extras: Partial<OperationObject> = {}): MethodDecorator {
     return MergeMethodDecorators([
-      Post(),
+      this.usePrefix(Post),
       HttpCode(200),
       ApiOperation({
         summary: `Create a new ${this.entityClass.name}`,
@@ -116,7 +136,7 @@ export class RestfulFactory<T> {
 
   findOne(extras: Partial<OperationObject> = {}): MethodDecorator {
     return MergeMethodDecorators([
-      Get(':id'),
+      this.usePrefix(Get, ':id'),
       ApiOperation({
         summary: `Find a ${this.entityClass.name} by id`,
         ...extras,
@@ -140,7 +160,7 @@ export class RestfulFactory<T> {
 
   findAll(extras: Partial<OperationObject> = {}): MethodDecorator {
     return MergeMethodDecorators([
-      Get(),
+      this.usePrefix(Get),
       ApiOperation({ summary: `Find all ${this.entityClass.name}`, ...extras }),
       ApiOkResponse({ type: this.entityArrayReturnMessageDto }),
     ]);
@@ -152,7 +172,7 @@ export class RestfulFactory<T> {
 
   update(extras: Partial<OperationObject> = {}): MethodDecorator {
     return MergeMethodDecorators([
-      Patch(':id'),
+      this.usePrefix(Patch, ':id'),
       HttpCode(200),
       ApiOperation({
         summary: `Update a ${this.entityClass.name} by id`,
@@ -182,7 +202,7 @@ export class RestfulFactory<T> {
 
   delete(extras: Partial<OperationObject> = {}): MethodDecorator {
     return MergeMethodDecorators([
-      Delete(':id'),
+      this.usePrefix(Delete, ':id'),
       HttpCode(200),
       ApiOperation({
         summary: `Delete a ${this.entityClass.name} by id`,
