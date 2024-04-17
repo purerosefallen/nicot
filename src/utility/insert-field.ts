@@ -30,6 +30,14 @@ type TypeFromInsertOptions<O extends InsertOptions> = O extends InsertOptions<
       | (O extends { options: { required: true } } ? never : undefined)
   : never;
 
+type Merge<T, U> = {
+  [K in keyof T | keyof U]: K extends keyof T
+    ? T[K]
+    : K extends keyof U
+    ? U[K]
+    : never;
+};
+
 export function InsertField<
   C extends AnyClass,
   M extends Record<string, InsertOptions>,
@@ -37,9 +45,12 @@ export function InsertField<
   cl: C,
   map: M,
   newName?: string,
-): new (...args: ParamsFromClass<C>) => TypeFromClass<C> & {
-  [F in keyof M]: TypeFromInsertOptions<M[F]>;
-} {
+): new (...args: ParamsFromClass<C>) => Merge<
+  {
+    [F in keyof M]: TypeFromInsertOptions<M[F]>;
+  },
+  TypeFromClass<C>
+> {
   const extendedCl = class extends cl {};
   for (const key in map) {
     ApiProperty({

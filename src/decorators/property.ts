@@ -12,6 +12,7 @@ import {
   IsString,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import {
   WithPrecisionColumnType,
@@ -19,9 +20,14 @@ import {
 } from 'typeorm/driver/types/ColumnTypes';
 import { ColumnWithWidthOptions } from 'typeorm/decorator/options/ColumnWithWidthOptions';
 import { ColumnNumericOptions } from 'typeorm/decorator/options/ColumnNumericOptions';
-import { Exclude, Transform } from 'class-transformer';
+import { Exclude, Transform, Type } from 'class-transformer';
 import { BigintTransformer } from '../utility/bigint';
 import { Metadata } from '../utility/metadata';
+import {
+  ClassOrArray,
+  getClassFromClassOrArray,
+  ParseType,
+} from '../utility/insert-field';
 
 export interface OpenAPIOptions<T> {
   description?: string;
@@ -189,6 +195,21 @@ export const BoolColumn = (
     validatorDecorator(options),
     swaggerDecorator(options, { type: Boolean }),
   ]);
+
+export const JsonColumn = <C extends ClassOrArray>(
+  definition: C,
+  options: PropertyOptions<ParseType<C>> = {},
+): PropertyDecorator => {
+  const cl = getClassFromClassOrArray(definition);
+  return MergePropertyDecorators([
+    Index(),
+    Type(() => cl),
+    ValidateNested(),
+    Column('jsonb', columnDecoratorOptions(options)),
+    validatorDecorator(options),
+    swaggerDecorator(options, { type: definition }),
+  ]);
+};
 
 export const NotColumn = (
   options: OpenAPIOptions<any> = {},
