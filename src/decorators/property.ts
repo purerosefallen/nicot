@@ -203,7 +203,6 @@ export const JsonColumn = <C extends ClassOrArray>(
 ): PropertyDecorator => {
   const cl = getClassFromClassOrArray(definition);
   return MergePropertyDecorators([
-    Index(),
     Type(() => cl),
     ValidateNested(),
     Column('jsonb', {
