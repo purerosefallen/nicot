@@ -29,6 +29,7 @@ import {
   ParseType,
 } from '../utility/insert-field';
 import { TypeTransformer } from '../utility/type-transformer';
+import { NotQueryable } from './access';
 
 export interface OpenAPIOptions<T> {
   description?: string;
@@ -203,6 +204,7 @@ export const JsonColumn = <C extends ClassOrArray>(
 ): PropertyDecorator => {
   const cl = getClassFromClassOrArray(definition);
   return MergePropertyDecorators([
+    NotQueryable(),
     Type(() => cl),
     ValidateNested(),
     Column('jsonb', {
