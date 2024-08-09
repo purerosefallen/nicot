@@ -55,6 +55,7 @@ export interface CrudOptions<T extends ValidCrudEntity<T>> {
   relations?: (string | RelationDef)[];
   extraGetQuery?: (qb: SelectQueryBuilder<T>) => void;
   hardDelete?: boolean;
+  createOrUpdate?: boolean;
 }
 
 export class CrudBase<T extends ValidCrudEntity<T>> {
@@ -103,7 +104,9 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
                 where: {
                   id: In<string | number>(chunk),
                 },
-                select: ['id', 'deleteTime'],
+                select: this.crudOptions.createOrUpdate
+                  ? undefined
+                  : ['id', 'deleteTime'],
                 withDeleted: true,
               }),
             ),
@@ -117,23 +120,43 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
             (ent) => ent.deleteTime != null,
           );
           if (existingEntsWithoutDeleteTime.length) {
-            if (!skipErrors) {
-              throw new BlankReturnMessageDto(
-                404,
-                `${this.entityName} ID ${existingEntsWithoutDeleteTime.join(
-                  ',',
-                )} already exists`,
-              ).toException();
+            if (this.crudOptions.createOrUpdate) {
+              const existingIdMap = new Map<number, T>();
+              existingEntsWithoutDeleteTime.forEach((ent) => {
+                existingIdMap.set(ent.id, ent);
+              });
+              entsToSave = [];
+              for (const ent of ents) {
+                if (existingIdMap.has(ent.id)) {
+                  const existingEnt = existingIdMap.get(ent.id);
+                  Object.assign(existingEnt, ent);
+                  entsToSave.push(existingEnt);
+                } else {
+                  entsToSave.push(ent);
+                }
+              }
+            } else {
+              if (!skipErrors) {
+                throw new BlankReturnMessageDto(
+                  404,
+                  `${this.entityName} ID ${existingEntsWithoutDeleteTime.join(
+                    ',',
+                  )} already exists`,
+                ).toException();
+              }
+              const existingEntsWithoutDeleteTimeIdSet = new Set(
+                existingEntsWithoutDeleteTime.map((e) => e.id),
+              );
+              const skippedEnts = ents.filter((ent) =>
+                existingEntsWithoutDeleteTimeIdSet.has(ent.id),
+              );
+              skipped = skippedEnts.map((ent) => ({
+                result: 'Already exists',
+                entry: ent,
+              }));
+              const skippedEntsSet = new Set(skippedEnts);
+              entsToSave = ents.filter((ent) => !skippedEntsSet.has(ent));
             }
-            const skippedEnts = ents.filter((ent) =>
-              existingEntsWithoutDeleteTime.some((e) => e.id === ent.id),
-            );
-            skipped = skippedEnts.map((ent) => ({
-              result: 'Already exists',
-              entry: ent,
-            }));
-            const skippedEntsSet = new Set(skippedEnts);
-            entsToSave = ents.filter((ent) => !skippedEntsSet.has(ent));
           }
           if (existingEntsWithDeleteTime.length) {
             await repo.delete(
@@ -177,7 +200,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     if (!_ent) {
       throw new BlankReturnMessageDto(400, 'Invalid entity').toException();
     }
-    const ent = new this.entityClass();
+    let ent = new this.entityClass();
     Object.assign(ent, _ent);
     const invalidReason = ent.isValidInCreate();
     if (invalidReason) {
@@ -188,12 +211,17 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       if (ent.id != null) {
         const existingEnt = await repo.findOne({
           where: { id: ent.id },
-          select: ['id', 'deleteTime'],
+          select: this.crudOptions.createOrUpdate
+            ? undefined
+            : ['id', 'deleteTime'],
           withDeleted: true,
         });
         if (existingEnt) {
           if (existingEnt.deleteTime) {
             await repo.delete(existingEnt.id);
+          } else if (this.crudOptions.createOrUpdate) {
+            Object.assign(existingEnt, ent);
+            ent = existingEnt;
           } else {
             throw new BlankReturnMessageDto(
               404,
