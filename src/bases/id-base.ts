@@ -3,12 +3,12 @@ import { Generated, SelectQueryBuilder } from 'typeorm';
 import { applyQueryProperty } from '../utility';
 import {
   IntColumn,
-  MergePropertyDecorators,
   NotChangeable,
   NotWritable,
   StringColumn,
 } from '../decorators';
 import { IsNotEmpty } from 'class-validator';
+import { MergePropertyDecorators } from 'nesties';
 
 export interface IdOptions {
   description?: string;

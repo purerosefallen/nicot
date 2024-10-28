@@ -1,7 +1,7 @@
 import { ColumnCommonOptions } from 'typeorm/decorator/options/ColumnCommonOptions';
 import { ApiProperty, ApiPropertyOptions } from '@nestjs/swagger';
 import { ColumnWithLengthOptions } from 'typeorm/decorator/options/ColumnWithLengthOptions';
-import { MergePropertyDecorators } from './merge';
+import { MergePropertyDecorators } from 'nesties';
 import { Column, Index } from 'typeorm';
 import {
   IsDate,

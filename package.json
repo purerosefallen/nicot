@@ -69,6 +69,7 @@
   },
   "dependencies": {
     "lodash": "^4.17.21",
+    "nesties": "^1.0.1",
     "typed-reflector": "^1.0.11"
   }
 }

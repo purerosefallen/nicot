@@ -3,11 +3,7 @@ import { SelectQueryBuilder } from 'typeorm';
 import { IsInt, IsPositive } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { reflector } from '../utility/metadata';
-
-export interface PageSettingsWise {
-  pageCount: number;
-  recordsPerPage: number;
-}
+import { PageSettingsWise } from 'nesties';
 
 export interface PageSettingsFactory {
   getActualPageSettings(): PageSettingsWise;

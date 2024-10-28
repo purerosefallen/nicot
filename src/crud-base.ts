@@ -1,9 +1,4 @@
-import {
-  BlankReturnMessageDto,
-  ImportEntryDto,
-  PaginatedReturnMessageDto,
-  ReturnMessageDto,
-} from './dto';
+import { ImportEntryDto } from './dto';
 import {
   DeepPartial,
   DeleteResult,
@@ -23,6 +18,11 @@ import { ConsoleLogger } from '@nestjs/common';
 import { camelCase } from 'typeorm/util/StringUtils';
 import _ from 'lodash';
 import { ClassType } from './utility/insert-field';
+import {
+  BlankReturnMessageDto,
+  PaginatedReturnMessageDto,
+  ReturnMessageDto,
+} from 'nesties';
 
 export type EntityId<T extends { id: any }> = T['id'];
 export interface RelationDef {
