@@ -1,10 +1,12 @@
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Controller, Injectable } from '@nestjs/common';
 import { CrudService } from '../src/crud-base';
-import { User } from './utility/user';
+import { Gender, User } from './utility/user';
 import { RestfulFactory } from '../src/decorators';
-import { InjectDataSource } from '@nestjs/typeorm';
+import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
 
 @Injectable()
 class UserService extends CrudService(User) {
@@ -51,6 +53,7 @@ describe('app', () => {
     expect(true).toBe(true);
   });
 });
+
 
 /*
 describe('app', () => {
@@ -107,39 +110,37 @@ describe('app', () => {
     await request(server)
       .post('/user')
       .send({ name: 'Yuzu', age: 20, gender: 'F' })
-      .expect(201);
+      .expect(200);
     await request(server)
       .get('/user/1')
-      .expect({
-        success: true,
-        statusCode: 200,
-        message: 'success',
-        data: { id: 1, name: 'Yuzu', age: 20, gender: 'F' },
+      .expect(res => {
+        expect(res.body.success).toBe(true);
+        expect(res.body.data).toMatchObject({
+          id: 1,
+          name: 'Yuzu',
+          age: 20,
+          gender: 'F',
+        });
       });
     await request(server)
       .patch('/user/1')
       .send({ name: 'Nana' })
-      .expect(200)
-      .expect({
-        success: true,
-        statusCode: 200,
-        message: 'success',
-      });
+      .expect(200);
     await request(server)
       .get('/user/1')
-      .expect({
-        success: true,
-        statusCode: 200,
-        message: 'success',
-        data: { id: 1, name: 'Nana', age: 20, gender: 'F' },
+      .expect(200)
+      .expect(res => {
+        expect(res.body.success).toBe(true);
+        expect(res.body.data).toMatchObject({
+          id: 1,
+          name: 'Nana',
+          age: 20,
+          gender: 'F',
+        });
       });
-    await request(server).delete('/user/1').expect({
-      success: true,
-      statusCode: 204,
-      message: 'success',
-    });
+    await request(server).delete('/user/1').expect(200);
     await request(server).get('/user/1').expect(404);
   });
 
 });
- */
+*/

@@ -49,7 +49,7 @@ function swaggerDecorator(
     description: options.description,
     ...injected,
     ...(options.propertyExtras || {}),
-  });
+  } as ApiPropertyOptions);
 }
 
 function validatorDecorator(options: OpenAPIOptions<any>) {
@@ -177,7 +177,7 @@ export const EnumColumn = <T>(
     }),
     IsEnum(targetEnum),
     validatorDecorator(options),
-    swaggerDecorator(options, { type: 'enum', enum: targetEnum }),
+    swaggerDecorator(options, { enum: targetEnum }),
   ]);
 };
 
