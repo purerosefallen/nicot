@@ -133,7 +133,11 @@ export class RestfulFactory<T> {
         }
         const relationFactory = new RestfulFactory(
           relationClass,
-          {},
+          {
+            entityClassName: `${this.getEntityClassName()}${
+              relationClass.name
+            }`,
+          },
           this.__resolveVisited,
         );
         const relationResultDto = relationFactory.entityResultDto;
