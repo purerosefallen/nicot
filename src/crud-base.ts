@@ -24,6 +24,7 @@ import {
   ReturnMessageDto,
 } from 'nesties';
 import { getNotInResultFields } from './utility/metadata';
+import { getTypeormRelations } from './utility/get-typeorm-relations';
 
 export type EntityId<T extends { id: any }> = T['id'];
 export interface RelationDef {
@@ -83,15 +84,39 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   }
 
   _cleanEntityNotInResultFields(ent: T): T {
-    const fields = getNotInResultFields(
-      this.entityClass,
-      this.crudOptions.keepEntityVersioningDates,
-    );
+    const visited = new Set();
+    const runSingleObject = (o: any, cl) => {
+      if (visited.has(o)) {
+        return o;
+      }
+      const fields = getNotInResultFields(
+        cl,
+        this.crudOptions.keepEntityVersioningDates,
+      );
+      for (const field of fields) {
+        delete o[field];
+      }
+      visited.add(o);
+      const relations = getTypeormRelations(cl);
+      for (const relation of relations) {
+        const propertyName = relation.propertyName as string;
+        if (o[propertyName]) {
+          if (Array.isArray(o[propertyName])) {
+            o[propertyName] = o[propertyName].map((r) =>
+              runSingleObject(r, relation.propertyClass),
+            );
+          } else {
+            o[propertyName] = runSingleObject(
+              o[propertyName],
+              relation.propertyClass,
+            );
+          }
+        }
+      }
+      return o;
+    };
 
-    for (const field of fields) {
-      delete (ent as any)[field];
-    }
-    return ent;
+    return runSingleObject(ent, this.entityClass);
   }
 
   cleanEntityNotInResultFields<E extends T | T[]>(ents: E): E {
@@ -203,11 +228,8 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
           results = results.concat(savedChunk);
         }
         return {
-          results: this.cleanEntityNotInResultFields(results),
-          skipped: skipped.map((e) => ({
-            ...e,
-            entry: this.cleanEntityNotInResultFields(e.entry),
-          })),
+          results,
+          skipped,
         };
       } catch (e) {
         this.log.error(
@@ -448,9 +470,14 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   }
 
   async importEntities(
-    ents: T[],
+    _ents: T[],
     extraChecking?: (ent: T) => string | Promise<string>,
   ) {
+    const ents = _ents.map((ent) => {
+      const newEnt = new this.entityClass();
+      Object.assign(newEnt, ent);
+      return newEnt;
+    });
     const invalidResults = _.compact(
       await Promise.all(
         ents.map(async (ent) => {
@@ -484,6 +511,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       results.map((r) => {
         const entry = new this.importEntryDto();
         Object.assign(entry, r);
+        entry.entry = this.cleanEntityNotInResultFields(r.entry);
         return entry;
       }),
     );

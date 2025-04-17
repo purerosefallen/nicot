@@ -35,8 +35,8 @@ import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.i
 import _ from 'lodash';
 import { getNotInResultFields, getSpecificFields } from '../utility/metadata';
 import { RenameClass } from '../utility/rename-class';
-import { getMetadataArgsStorage } from 'typeorm';
 import { DECORATORS } from '@nestjs/swagger/dist/constants';
+import { getTypeormRelations } from '../utility/get-typeorm-relations';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -54,9 +54,7 @@ export class RestfulFactory<T> {
   readonly fieldsToOmit = _.uniq([
     ...(getSpecificFields(this.entityClass, 'notColumn') as (keyof T)[]),
     ...(this.options.fieldsToOmit || []),
-    ...getMetadataArgsStorage()
-      .relations.filter((r) => r.target === this.entityClass)
-      .map((r) => r.propertyName as keyof T),
+    ...getTypeormRelations(this.entityClass).map((r) => r.propertyName),
   ]);
   private readonly basicInputDto = OmitType(
     this.entityClass,
@@ -99,18 +97,9 @@ export class RestfulFactory<T> {
       ...(this.options.outputFieldsToOmit || []),
     ]);
     const resultDto = OmitType(this.entityClass, [...outputFieldsToOmit]);
-    const { relations } = getMetadataArgsStorage();
+    const relations = getTypeormRelations(this.entityClass);
     for (const relation of relations) {
-      if (
-        outputFieldsToOmit.has(relation.propertyName as keyof T) ||
-        relation.target !== this.entityClass
-      )
-        continue;
-      const relationClassFactory = relation.type;
-      // check if it's a callable function
-      if (typeof relationClassFactory !== 'function') continue;
-      const relationClass = (relationClassFactory as () => AnyClass)();
-      if (typeof relationClass !== 'function') continue;
+      if (outputFieldsToOmit.has(relation.propertyName)) continue;
       const replace = (useClass: [AnyClass]) => {
         const oldApiProperty =
           Reflect.getMetadata(
@@ -118,14 +107,13 @@ export class RestfulFactory<T> {
             this.entityClass.prototype,
             relation.propertyName,
           ) || {};
-        const isArray = relation.relationType.endsWith('-many');
         ApiProperty({
           ...oldApiProperty,
           required: false,
-          type: () => (isArray ? [useClass[0]] : useClass[0]),
+          type: () => (relation.isArray ? [useClass[0]] : useClass[0]),
         })(resultDto.prototype, relation.propertyName);
       };
-      const existing = this.__resolveVisited.get(relationClass);
+      const existing = this.__resolveVisited.get(relation.propertyClass);
       if (existing) {
         replace(existing);
       } else {
@@ -133,17 +121,17 @@ export class RestfulFactory<T> {
           this.__resolveVisited.set(this.entityClass, [null]);
         }
         const relationFactory = new RestfulFactory(
-          relationClass,
+          relation.propertyClass,
           {
             entityClassName: `${this.getEntityClassName()}${
-              relationClass.name
+              relation.propertyClass.name
             }`,
           },
           this.__resolveVisited,
         );
         const relationResultDto = relationFactory.entityResultDto;
         replace([relationResultDto]);
-        this.__resolveVisited.set(relationClass, [relationResultDto]);
+        this.__resolveVisited.set(relation.propertyClass, [relationResultDto]);
       }
     }
     const res = RenameClass(
