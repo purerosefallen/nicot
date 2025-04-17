@@ -13,7 +13,6 @@ import { ImportDataDto, ImportEntryDto } from '../dto';
 import {
   AnyClass,
   BlankReturnMessageDto,
-  InsertField,
   MergeMethodDecorators,
   PaginatedReturnMessageDto,
   ReturnMessageDto,
@@ -27,6 +26,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiProperty,
   OmitType,
   PartialType,
 } from '@nestjs/swagger';
@@ -98,7 +98,7 @@ export class RestfulFactory<T> {
       ) as (keyof T)[]),
       ...(this.options.outputFieldsToOmit || []),
     ]);
-    let resultDto = OmitType(this.entityClass, [...outputFieldsToOmit]);
+    const resultDto = OmitType(this.entityClass, [...outputFieldsToOmit]);
     const { relations } = getMetadataArgsStorage();
     for (const relation of relations) {
       if (
@@ -111,22 +111,18 @@ export class RestfulFactory<T> {
       if (typeof relationClassFactory !== 'function') continue;
       const relationClass = (relationClassFactory as () => AnyClass)();
       if (typeof relationClass !== 'function') continue;
-      const oldApiProperty =
-        Reflect.getMetadata(
-          DECORATORS.API_MODEL_PROPERTIES,
-          this.entityClass.prototype,
-          relation.propertyName,
-        ) || {};
       const replace = (useClass) => {
-        resultDto = InsertField(resultDto, {
-          [relation.propertyName]: {
-            required: false,
-            ...oldApiProperty,
-            type: relation.relationType.endsWith('-many')
-              ? [useClass]
-              : useClass,
-          },
-        });
+        const oldApiProperty =
+          Reflect.getMetadata(
+            DECORATORS.API_MODEL_PROPERTIES,
+            this.entityClass.prototype,
+            relation.propertyName,
+          ) || {};
+        ApiProperty({
+          ...oldApiProperty,
+          required: false,
+          type: relation.relationType.endsWith('-many') ? [useClass] : useClass,
+        })(resultDto.prototype, relation.propertyName);
       };
       const existing = this.__resolveVisited.get(relationClass);
       if (existing) {
@@ -140,7 +136,7 @@ export class RestfulFactory<T> {
           {},
           this.__resolveVisited,
         );
-        const relationResultDto = relationFactory.resolveEntityResultDto();
+        const relationResultDto = relationFactory.entityResultDto;
         replace(relationResultDto);
         this.__resolveVisited.set(relationClass, relationResultDto);
       }
