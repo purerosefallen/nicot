@@ -23,11 +23,7 @@ import { ColumnNumericOptions } from 'typeorm/decorator/options/ColumnNumericOpt
 import { Exclude, Transform, Type } from 'class-transformer';
 import { BigintTransformer } from '../utility/bigint';
 import { Metadata } from '../utility/metadata';
-import {
-  ClassOrArray,
-  getClassFromClassOrArray,
-  ParseType,
-} from '../utility/insert-field';
+import { ClassOrArray, getClassFromClassOrArray, ParseType } from 'nesties';
 import { TypeTransformer } from '../utility/type-transformer';
 import { NotQueryable } from './access';
 

@@ -1,5 +1,5 @@
-import { ClassOrArray } from './insert-field';
 import { ValueTransformer } from 'typeorm';
+import { ClassOrArray } from 'nesties';
 
 export class TypeTransformer implements ValueTransformer {
   constructor(private definition: ClassOrArray) {}

@@ -17,12 +17,13 @@ import {
 import { ConsoleLogger } from '@nestjs/common';
 import { camelCase } from 'typeorm/util/StringUtils';
 import _ from 'lodash';
-import { ClassType } from './utility/insert-field';
 import {
   BlankReturnMessageDto,
+  ClassType,
   PaginatedReturnMessageDto,
   ReturnMessageDto,
 } from 'nesties';
+import { getNotInResultFields } from './utility/metadata';
 
 export type EntityId<T extends { id: any }> = T['id'];
 export interface RelationDef {
@@ -56,6 +57,7 @@ export interface CrudOptions<T extends ValidCrudEntity<T>> {
   extraGetQuery?: (qb: SelectQueryBuilder<T>) => void;
   hardDelete?: boolean;
   createOrUpdate?: boolean;
+  keepEntityVersioningDates?: boolean;
 }
 
 export class CrudBase<T extends ValidCrudEntity<T>> {
@@ -78,6 +80,26 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     this.entityRelations = crudOptions.relations || [];
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     this.extraGetQuery = crudOptions.extraGetQuery || ((qb) => {});
+  }
+
+  _cleanEntityNotInResultFields(ent: T): T {
+    const fields = getNotInResultFields(
+      this.entityClass,
+      this.crudOptions.keepEntityVersioningDates,
+    );
+
+    for (const field of fields) {
+      delete (ent as any)[field];
+    }
+    return ent;
+  }
+
+  cleanEntityNotInResultFields<E extends T | T[]>(ents: E): E {
+    if (Array.isArray(ents)) {
+      return ents.map((ent) => this._cleanEntityNotInResultFields(ent)) as E;
+    } else {
+      return this._cleanEntityNotInResultFields(ents as T) as E;
+    }
   }
 
   async _batchCreate(
@@ -181,8 +203,11 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
           results = results.concat(savedChunk);
         }
         return {
-          results,
-          skipped,
+          results: this.cleanEntityNotInResultFields(results),
+          skipped: skipped.map((e) => ({
+            ...e,
+            entry: this.cleanEntityNotInResultFields(e.entry),
+          })),
         };
       } catch (e) {
         this.log.error(
@@ -237,7 +262,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       try {
         const savedEnt = await repo.save(ent as DeepPartial<T>);
         await savedEnt.afterCreate();
-        return savedEnt;
+        return this.cleanEntityNotInResultFields(savedEnt);
       } catch (e) {
         this.log.error(
           `Failed to create entity ${JSON.stringify(ent)}: ${e.toString()}`,
@@ -318,7 +343,11 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       ).toException();
     }
     await ent.afterGet();
-    return new this.entityReturnMessageDto(200, 'success', ent);
+    return new this.entityReturnMessageDto(
+      200,
+      'success',
+      this.cleanEntityNotInResultFields(ent),
+    );
   }
 
   async findAll(
@@ -342,7 +371,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       return new this.entityPaginatedReturnMessageDto(
         200,
         'success',
-        ents,
+        this.cleanEntityNotInResultFields(ents),
         count,
         newEnt.getActualPageSettings(),
       );

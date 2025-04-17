@@ -4,7 +4,7 @@ import {
   SelectQueryBuilder,
   UpdateDateColumn,
 } from 'typeorm';
-import { NotColumn } from '../decorators';
+import { NotColumn, NotInResult } from '../decorators';
 import { PageSettingsDto } from './page-settings';
 
 export interface DeletionWise {
@@ -27,14 +27,17 @@ export class TimeBase
 {
   @CreateDateColumn({ select: false })
   @NotColumn()
+  @NotInResult({ entityVersioningDate: true })
   createTime: Date;
 
   @UpdateDateColumn({ select: false })
   @NotColumn()
+  @NotInResult({ entityVersioningDate: true })
   updateTime: Date;
 
   @DeleteDateColumn({ select: false })
   @NotColumn()
+  @NotInResult({ entityVersioningDate: true })
   deleteTime: Date;
 
   isValidInCreate(): string | undefined {

@@ -6,6 +6,8 @@ interface SpecificFields {
   notWritable: boolean;
   notChangeable: boolean;
   notQueryable: boolean;
+  notInResult: boolean;
+  entityVersioningDate: boolean;
 }
 
 interface MetadataMap extends SpecificFields {
@@ -25,4 +27,18 @@ export function getSpecificFields(obj: any, type: keyof SpecificFields) {
   return reflector
     .getArray(`${type}Fields`, obj)
     .filter((field) => reflector.get(type, obj, field));
+}
+
+export function getNotInResultFields(
+  obj: any,
+  keepEntityVersioningDates = false,
+) {
+  const notInResultFields = getSpecificFields(obj, 'notInResult');
+  if (keepEntityVersioningDates) {
+    return notInResultFields;
+  }
+  return [
+    ...notInResultFields,
+    ...getSpecificFields(obj, 'entityVersioningDate'),
+  ];
 }

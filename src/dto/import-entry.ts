@@ -6,7 +6,7 @@ import {
   ClassOrArray,
   getClassFromClassOrArray,
   InsertField,
-} from '../utility/insert-field';
+} from 'nesties';
 
 export class ImportEntryBaseDto {
   @ApiProperty({ description: 'Import result', type: String })

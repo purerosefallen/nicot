@@ -1,4 +1,4 @@
-import { NotWritable } from '../decorators';
+import { NotInResult, NotWritable } from '../decorators';
 import { SelectQueryBuilder } from 'typeorm';
 import { IsInt, IsPositive } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
@@ -32,6 +32,7 @@ export class PageSettingsDto
     type: Number,
     minimum: 1,
   })
+  @NotInResult()
   pageCount: number;
 
   @NotWritable()
@@ -43,6 +44,7 @@ export class PageSettingsDto
     type: Number,
     minimum: 1,
   })
+  @NotInResult()
   recordsPerPage: number;
 
   getActualPageSettings(): PageSettingsWise {

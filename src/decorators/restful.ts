@@ -11,12 +11,14 @@ import {
 } from '@nestjs/common';
 import { ImportDataDto, ImportEntryDto } from '../dto';
 import {
+  AnyClass,
   BlankReturnMessageDto,
+  InsertField,
   MergeMethodDecorators,
   PaginatedReturnMessageDto,
   ReturnMessageDto,
+  ClassType,
 } from 'nesties';
-import { ClassType } from '../utility/insert-field';
 import {
   ApiBadRequestResponse,
   ApiBody,
@@ -31,33 +33,39 @@ import {
 import { CreatePipe, GetPipe, UpdatePipe } from './pipes';
 import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import _ from 'lodash';
-import { getSpecificFields } from '../utility/metadata';
+import { getNotInResultFields, getSpecificFields } from '../utility/metadata';
 import { RenameClass } from '../utility/rename-class';
+import { getMetadataArgsStorage } from 'typeorm';
+import { DECORATORS } from '@nestjs/swagger/dist/constants';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
   prefix?: string;
+  keepEntityVersioningDates?: boolean;
+  outputFieldsToOmit?: (keyof T)[];
+  entityClassName?: string;
 }
 
 export class RestfulFactory<T> {
-  readonly entityReturnMessageDto = ReturnMessageDto(this.entityClass);
-  readonly entityArrayReturnMessageDto = PaginatedReturnMessageDto(
-    this.entityClass,
-  );
-  readonly importReturnMessageDto = ReturnMessageDto([
-    ImportEntryDto(this.entityClass),
-  ]);
+  private getEntityClassName() {
+    return this.options.entityClassName || this.entityClass.name;
+  }
+
   readonly fieldsToOmit = _.uniq([
     ...(getSpecificFields(this.entityClass, 'notColumn') as (keyof T)[]),
     ...(this.options.fieldsToOmit || []),
+    ...getMetadataArgsStorage()
+      .relations.filter((r) => r.target === this.entityClass)
+      .map((r) => r.propertyName as keyof T),
   ]);
-  private readonly basicDto = OmitType(
+  private readonly basicInputDto = OmitType(
     this.entityClass,
     this.fieldsToOmit,
   ) as ClassType<T>;
+
   readonly createDto = RenameClass(
     OmitType(
-      this.basicDto,
+      this.basicInputDto,
       getSpecificFields(this.entityClass, 'notWritable') as (keyof T)[],
     ),
     `Create${this.entityClass.name}Dto`,
@@ -66,7 +74,7 @@ export class RestfulFactory<T> {
   readonly findAllDto = RenameClass(
     PartialType(
       OmitType(
-        this.basicDto,
+        this.basicInputDto,
         getSpecificFields(this.entityClass, 'notQueryable') as (keyof T)[],
       ),
     ),
@@ -81,6 +89,77 @@ export class RestfulFactory<T> {
     ),
     `Update${this.entityClass.name}Dto`,
   ) as ClassType<T>;
+
+  private resolveEntityResultDto() {
+    const outputFieldsToOmit = new Set([
+      ...(getNotInResultFields(
+        this.entityClass,
+        this.options.keepEntityVersioningDates,
+      ) as (keyof T)[]),
+      ...(this.options.outputFieldsToOmit || []),
+    ]);
+    let resultDto = OmitType(this.entityClass, [...outputFieldsToOmit]);
+    const { relations } = getMetadataArgsStorage();
+    for (const relation of relations) {
+      if (
+        outputFieldsToOmit.has(relation.propertyName as keyof T) ||
+        relation.target !== this.entityClass
+      )
+        continue;
+      const relationClassFactory = relation.type;
+      // check if it's a callable function
+      if (typeof relationClassFactory !== 'function') continue;
+      const relationClass = (relationClassFactory as () => AnyClass)();
+      if (typeof relationClass !== 'function') continue;
+      const oldApiProperty =
+        Reflect.getMetadata(
+          DECORATORS.API_MODEL_PROPERTIES,
+          this.entityClass.prototype,
+          relation.propertyName,
+        ) || {};
+      const replace = (useClass) => {
+        resultDto = InsertField(resultDto, {
+          [relation.propertyName]: {
+            required: false,
+            ...oldApiProperty,
+            type: relation.relationType.endsWith('-many')
+              ? [useClass]
+              : useClass,
+          },
+        });
+      };
+      const existing = this.__resolveVisited.get(relationClass);
+      if (existing) {
+        replace(existing);
+      } else {
+        if (!this.__resolveVisited.has(this.entityClass)) {
+          this.__resolveVisited.set(this.entityClass, Object);
+        }
+        const relationFactory = new RestfulFactory(
+          relationClass,
+          {},
+          this.__resolveVisited,
+        );
+        const relationResultDto = relationFactory.resolveEntityResultDto();
+        replace(relationResultDto);
+        this.__resolveVisited.set(relationClass, relationResultDto);
+      }
+    }
+    return RenameClass(
+      resultDto,
+      `${this.getEntityClassName()}ResultDto`,
+    ) as ClassType<T>;
+  }
+
+  readonly entityResultDto = this.resolveEntityResultDto();
+
+  readonly entityReturnMessageDto = ReturnMessageDto(this.entityResultDto);
+  readonly entityArrayReturnMessageDto = PaginatedReturnMessageDto(
+    this.entityResultDto,
+  );
+  readonly importReturnMessageDto = ReturnMessageDto([
+    ImportEntryDto(this.entityResultDto),
+  ]);
   // eslint-disable-next-line @typescript-eslint/ban-types
   readonly idType: Function = Reflect.getMetadata(
     'design:type',
@@ -91,6 +170,7 @@ export class RestfulFactory<T> {
   constructor(
     public readonly entityClass: ClassType<T>,
     private options: RestfulFactoryOptions<T> = {},
+    private __resolveVisited = new Map<AnyClass, AnyClass>(),
   ) {}
 
   private usePrefix(
@@ -117,14 +197,14 @@ export class RestfulFactory<T> {
       this.usePrefix(Post),
       HttpCode(200),
       ApiOperation({
-        summary: `Create a new ${this.entityClass.name}`,
+        summary: `Create a new ${this.getEntityClassName()}`,
         ...extras,
       }),
       ApiBody({ type: this.createDto }),
       ApiOkResponse({ type: this.entityReturnMessageDto }),
       ApiBadRequestResponse({
         type: BlankReturnMessageDto,
-        description: `The ${this.entityClass.name} is not valid`,
+        description: `The ${this.getEntityClassName()} is not valid`,
       }),
     ]);
   }
@@ -137,14 +217,14 @@ export class RestfulFactory<T> {
     return MergeMethodDecorators([
       this.usePrefix(Get, ':id'),
       ApiOperation({
-        summary: `Find a ${this.entityClass.name} by id`,
+        summary: `Find a ${this.getEntityClassName()} by id`,
         ...extras,
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiOkResponse({ type: this.entityReturnMessageDto }),
       ApiNotFoundResponse({
         type: BlankReturnMessageDto,
-        description: `The ${this.entityClass.name} with the given id was not found`,
+        description: `The ${this.getEntityClassName()} with the given id was not found`,
       }),
     ]);
   }
@@ -160,7 +240,10 @@ export class RestfulFactory<T> {
   findAll(extras: Partial<OperationObject> = {}): MethodDecorator {
     return MergeMethodDecorators([
       this.usePrefix(Get),
-      ApiOperation({ summary: `Find all ${this.entityClass.name}`, ...extras }),
+      ApiOperation({
+        summary: `Find all ${this.getEntityClassName()}`,
+        ...extras,
+      }),
       ApiOkResponse({ type: this.entityArrayReturnMessageDto }),
     ]);
   }
@@ -174,7 +257,7 @@ export class RestfulFactory<T> {
       this.usePrefix(Patch, ':id'),
       HttpCode(200),
       ApiOperation({
-        summary: `Update a ${this.entityClass.name} by id`,
+        summary: `Update a ${this.getEntityClassName()} by id`,
         ...extras,
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
@@ -182,11 +265,11 @@ export class RestfulFactory<T> {
       ApiOkResponse({ type: BlankReturnMessageDto }),
       ApiNotFoundResponse({
         type: BlankReturnMessageDto,
-        description: `The ${this.entityClass.name} with the given id was not found`,
+        description: `The ${this.getEntityClassName()} with the given id was not found`,
       }),
       ApiBadRequestResponse({
         type: BlankReturnMessageDto,
-        description: `The ${this.entityClass.name} is not valid`,
+        description: `The ${this.getEntityClassName()} is not valid`,
       }),
       ApiInternalServerErrorResponse({
         type: BlankReturnMessageDto,
@@ -204,14 +287,14 @@ export class RestfulFactory<T> {
       this.usePrefix(Delete, ':id'),
       HttpCode(200),
       ApiOperation({
-        summary: `Delete a ${this.entityClass.name} by id`,
+        summary: `Delete a ${this.getEntityClassName()} by id`,
         ...extras,
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiOkResponse({ type: BlankReturnMessageDto }),
       ApiNotFoundResponse({
         type: BlankReturnMessageDto,
-        description: `The ${this.entityClass.name} with the given id was not found`,
+        description: `The ${this.getEntityClassName()} with the given id was not found`,
       }),
       ApiInternalServerErrorResponse({
         type: BlankReturnMessageDto,
@@ -224,7 +307,7 @@ export class RestfulFactory<T> {
     return MergeMethodDecorators([
       Post('import'),
       ApiOperation({
-        summary: `Import ${this.entityClass.name}`,
+        summary: `Import ${this.getEntityClassName()}`,
         ...extras,
       }),
       ApiBody({ type: ImportDataDto(this.createDto) }),

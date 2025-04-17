@@ -18,3 +18,8 @@ export const NotChangeable = () =>
 
 export const NotQueryable = () =>
   Metadata.set('notQueryable', true, 'notQueryableFields');
+
+export const NotInResult = (options: { entityVersioningDate?: boolean } = {}) =>
+  options.entityVersioningDate
+    ? Metadata.set('entityVersioningDate', true, 'entityVersioningDateFields')
+    : Metadata.set('notInResult', true, 'notInResultFields');
