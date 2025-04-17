@@ -111,17 +111,18 @@ export class RestfulFactory<T> {
       if (typeof relationClassFactory !== 'function') continue;
       const relationClass = (relationClassFactory as () => AnyClass)();
       if (typeof relationClass !== 'function') continue;
-      const replace = (useClass) => {
+      const replace = (useClass: [AnyClass]) => {
         const oldApiProperty =
           Reflect.getMetadata(
             DECORATORS.API_MODEL_PROPERTIES,
             this.entityClass.prototype,
             relation.propertyName,
           ) || {};
+        const isArray = relation.relationType.endsWith('-many');
         ApiProperty({
           ...oldApiProperty,
           required: false,
-          type: relation.relationType.endsWith('-many') ? [useClass] : useClass,
+          type: () => (isArray ? [useClass[0]] : useClass[0]),
         })(resultDto.prototype, relation.propertyName);
       };
       const existing = this.__resolveVisited.get(relationClass);
@@ -129,7 +130,7 @@ export class RestfulFactory<T> {
         replace(existing);
       } else {
         if (!this.__resolveVisited.has(this.entityClass)) {
-          this.__resolveVisited.set(this.entityClass, Object);
+          this.__resolveVisited.set(this.entityClass, [null]);
         }
         const relationFactory = new RestfulFactory(
           relationClass,
@@ -141,14 +142,19 @@ export class RestfulFactory<T> {
           this.__resolveVisited,
         );
         const relationResultDto = relationFactory.entityResultDto;
-        replace(relationResultDto);
-        this.__resolveVisited.set(relationClass, relationResultDto);
+        replace([relationResultDto]);
+        this.__resolveVisited.set(relationClass, [relationResultDto]);
       }
     }
-    return RenameClass(
+    const res = RenameClass(
       resultDto,
       `${this.getEntityClassName()}ResultDto`,
     ) as ClassType<T>;
+    const currentContainer = this.__resolveVisited.get(this.entityClass);
+    if (currentContainer) {
+      currentContainer[0] = res;
+    }
+    return res;
   }
 
   readonly entityResultDto = this.resolveEntityResultDto();
@@ -170,7 +176,7 @@ export class RestfulFactory<T> {
   constructor(
     public readonly entityClass: ClassType<T>,
     private options: RestfulFactoryOptions<T> = {},
-    private __resolveVisited = new Map<AnyClass, AnyClass>(),
+    private __resolveVisited = new Map<AnyClass, [AnyClass]>(),
   ) {}
 
   private usePrefix(
