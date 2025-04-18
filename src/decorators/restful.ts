@@ -54,7 +54,9 @@ export class RestfulFactory<T> {
   readonly fieldsToOmit = _.uniq([
     ...(getSpecificFields(this.entityClass, 'notColumn') as (keyof T)[]),
     ...(this.options.fieldsToOmit || []),
-    ...getTypeormRelations(this.entityClass).map((r) => r.propertyName),
+    ...getTypeormRelations(this.entityClass).map(
+      (r) => r.propertyName as keyof T,
+    ),
   ]);
   private readonly basicInputDto = OmitType(
     this.entityClass,
@@ -99,7 +101,7 @@ export class RestfulFactory<T> {
     const resultDto = OmitType(this.entityClass, [...outputFieldsToOmit]);
     const relations = getTypeormRelations(this.entityClass);
     for (const relation of relations) {
-      if (outputFieldsToOmit.has(relation.propertyName)) continue;
+      if (outputFieldsToOmit.has(relation.propertyName as keyof T)) continue;
       const replace = (useClass: [AnyClass]) => {
         const oldApiProperty =
           Reflect.getMetadata(

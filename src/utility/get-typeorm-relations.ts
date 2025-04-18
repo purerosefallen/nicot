@@ -27,7 +27,7 @@ export function getTypeormRelations<T>(cl: ClassType<T>) {
     return {
       isArray,
       propertyClass,
-      propertyName: relation.propertyName as keyof T & string,
+      propertyName: relation.propertyName,
     };
   });
 }
