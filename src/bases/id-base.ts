@@ -7,7 +7,7 @@ import {
   NotWritable,
   StringColumn,
 } from '../decorators';
-import { IsNotEmpty } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 import { MergePropertyDecorators } from 'nesties';
 
 export interface IdOptions {
@@ -38,7 +38,7 @@ export function IdBase(idOptions: IdOptions = {}) {
 }
 
 export interface StringIdOptions extends IdOptions {
-  length: number;
+  length?: number;
   uuid?: boolean;
 }
 
@@ -56,18 +56,21 @@ export function StringIdBase(idOptions: StringIdOptions) {
     }
   };
   const decs = [
-    NotChangeable(),
-    StringColumn(idOptions.length, {
+    StringColumn(idOptions.length || (idOptions.uuid ? 36 : 255), {
       required: !idOptions.uuid,
       description: idOptions.description,
       columnExtras: { primary: true, nullable: false },
     }),
     Reflect.metadata('design:type', String),
-    IsNotEmpty(),
+    ...(idOptions.uuid ? [
+      Generated('uuid'),
+      NotWritable(),
+    ] : [
+      IsString(),
+      IsNotEmpty(),
+      NotChangeable(),
+    ])
   ];
-  if (idOptions.uuid) {
-    decs.push(Generated('uuid'));
-  }
   const dec = MergePropertyDecorators(decs);
   dec(cl.prototype, 'id');
   return cl;

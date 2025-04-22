@@ -144,13 +144,23 @@ export const DateColumn = (
     IsDate(),
     Transform(
       (v) => {
-        if (v.value == null) return v.value;
-        if (v.value instanceof Date) return v.value;
-        if (typeof v.value === 'number') return new Date(v.value * 1000);
-        if (typeof v.value === 'string' && v.value.match(/^\d+$/)) {
-          return new Date(parseInt(v.value, 10) * 1000);
+        const value = v.value;
+        if (value == null || value instanceof Date) return value;
+    
+        const timestampToDate = (t: number, isSeconds: boolean) =>
+          new Date(isSeconds ? t * 1000 : t);
+    
+        if (typeof value === 'number') {
+          const isSeconds = !Number.isInteger(value) || value < 1e12;
+          return timestampToDate(value, isSeconds);
         }
-        return new Date(v.value);
+    
+        if (typeof value === 'string' && /^\d+(\.\d+)?$/.test(value)) {
+          const isSeconds = value.includes('.') || parseFloat(value) < 1e12;
+          return timestampToDate(parseFloat(value), isSeconds);
+        }
+    
+        return new Date(value); // fallback to native parser
       },
       {
         toClassOnly: true,
