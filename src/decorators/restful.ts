@@ -148,13 +148,25 @@ export class RestfulFactory<T> {
   }
 
   readonly entityResultDto = this.resolveEntityResultDto();
+  readonly entityCreateResultDto = RenameClass(
+    OmitType(this.entityResultDto, [
+      ...getTypeormRelations(this.entityClass).map(
+        (r) => r.propertyName as keyof T,
+      ),
+      ...(getSpecificFields(this.entityClass, 'notColumn') as (keyof T)[]),
+    ]),
+    `${this.getEntityClassName()}CreateResultDto`,
+  );
 
   readonly entityReturnMessageDto = ReturnMessageDto(this.entityResultDto);
+  readonly entityCreateReturnMessageDto = ReturnMessageDto(
+    this.entityCreateResultDto,
+  );
   readonly entityArrayReturnMessageDto = PaginatedReturnMessageDto(
     this.entityResultDto,
   );
   readonly importReturnMessageDto = ReturnMessageDto([
-    ImportEntryDto(this.entityResultDto),
+    ImportEntryDto(this.entityCreateResultDto),
   ]);
   // eslint-disable-next-line @typescript-eslint/ban-types
   readonly idType: Function = Reflect.getMetadata(
@@ -197,7 +209,7 @@ export class RestfulFactory<T> {
         ...extras,
       }),
       ApiBody({ type: this.createDto }),
-      ApiOkResponse({ type: this.entityReturnMessageDto }),
+      ApiOkResponse({ type: this.entityCreateReturnMessageDto }),
       ApiBadRequestResponse({
         type: BlankReturnMessageDto,
         description: `The ${this.getEntityClassName()} is not valid`,
