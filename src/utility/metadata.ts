@@ -1,5 +1,6 @@
 import { MetadataSetter, Reflector } from 'typed-reflector';
 import { QueryCond } from '../bases';
+import { AnyClass } from 'nesties';
 
 interface SpecificFields {
   notColumn: boolean;
@@ -8,6 +9,7 @@ interface SpecificFields {
   notQueryable: boolean;
   notInResult: boolean;
   entityVersioningDate: boolean;
+  relationComputed: () => { entityClass: AnyClass; isArray: boolean };
 }
 
 interface MetadataMap extends SpecificFields {

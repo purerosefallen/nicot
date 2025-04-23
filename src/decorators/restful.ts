@@ -32,11 +32,12 @@ import {
 } from '@nestjs/swagger';
 import { CreatePipe, GetPipe, UpdatePipe } from './pipes';
 import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
-import _ from 'lodash';
+import _, { upperFirst } from 'lodash';
 import { getNotInResultFields, getSpecificFields } from '../utility/metadata';
 import { RenameClass } from '../utility/rename-class';
 import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import { getTypeormRelations } from '../utility/get-typeorm-relations';
+import { RelationDef } from '../crud-base';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -44,7 +45,24 @@ export interface RestfulFactoryOptions<T> {
   keepEntityVersioningDates?: boolean;
   outputFieldsToOmit?: (keyof T)[];
   entityClassName?: string;
+  relations?: (string | RelationDef)[];
 }
+
+const extractRelationName = (relation: string | RelationDef) => {
+  if (typeof relation === 'string') {
+    return relation;
+  } else {
+    return relation.name;
+  }
+};
+
+const getCurrentLevelRelations = (relations: string[]) =>
+  relations.filter((r) => !r.includes('.'));
+
+const getNextLevelRelations = (relations: string[], enteringField: string) =>
+  relations
+    .filter((r) => r.includes('.') && r.startsWith(`${enteringField}.`))
+    .map((r) => r.split('.').slice(1).join('.'));
 
 export class RestfulFactory<T> {
   private getEntityClassName() {
@@ -70,7 +88,7 @@ export class RestfulFactory<T> {
     ),
     `Create${this.entityClass.name}Dto`,
   ) as ClassType<T>;
-  readonly importDto = ImportDataDto(this.entityClass);
+  readonly importDto = ImportDataDto(this.createDto);
   readonly findAllDto = RenameClass(
     PartialType(
       OmitType(
@@ -91,15 +109,27 @@ export class RestfulFactory<T> {
   ) as ClassType<T>;
 
   private resolveEntityResultDto() {
+    const relations = getTypeormRelations(this.entityClass);
+    const currentLevelRelations =
+      this.options.relations &&
+      new Set(
+        getCurrentLevelRelations(
+          this.options.relations.map(extractRelationName),
+        ),
+      );
     const outputFieldsToOmit = new Set([
       ...(getNotInResultFields(
         this.entityClass,
         this.options.keepEntityVersioningDates,
       ) as (keyof T)[]),
       ...(this.options.outputFieldsToOmit || []),
+      ...(this.options.relations
+        ? (relations
+            .map((r) => r.propertyName)
+            .filter((r) => !currentLevelRelations.has(r)) as (keyof T)[])
+        : []),
     ]);
     const resultDto = OmitType(this.entityClass, [...outputFieldsToOmit]);
-    const relations = getTypeormRelations(this.entityClass);
     for (const relation of relations) {
       if (outputFieldsToOmit.has(relation.propertyName as keyof T)) continue;
       const replace = (useClass: [AnyClass]) => {
@@ -119,21 +149,36 @@ export class RestfulFactory<T> {
       if (existing) {
         replace(existing);
       } else {
-        if (!this.__resolveVisited.has(this.entityClass)) {
+        if (
+          !this.__resolveVisited.has(this.entityClass) &&
+          !this.options.relations
+        ) {
           this.__resolveVisited.set(this.entityClass, [null]);
         }
         const relationFactory = new RestfulFactory(
           relation.propertyClass,
           {
             entityClassName: `${this.getEntityClassName()}${
-              relation.propertyClass.name
+              this.options.relations
+                ? upperFirst(relation.propertyName)
+                : relation.propertyClass.name
             }`,
+            relations:
+              this.options.relations &&
+              getNextLevelRelations(
+                this.options.relations.map(extractRelationName),
+                relation.propertyName,
+              ),
           },
           this.__resolveVisited,
         );
         const relationResultDto = relationFactory.entityResultDto;
         replace([relationResultDto]);
-        this.__resolveVisited.set(relation.propertyClass, [relationResultDto]);
+        if (!this.options.relations) {
+          this.__resolveVisited.set(relation.propertyClass, [
+            relationResultDto,
+          ]);
+        }
       }
     }
     const res = RenameClass(
@@ -318,7 +363,7 @@ export class RestfulFactory<T> {
         summary: `Import ${this.getEntityClassName()}`,
         ...extras,
       }),
-      ApiBody({ type: ImportDataDto(this.createDto) }),
+      ApiBody({ type: this.importDto }),
       ApiOkResponse({ type: this.importReturnMessageDto }),
       ApiInternalServerErrorResponse({
         type: BlankReturnMessageDto,

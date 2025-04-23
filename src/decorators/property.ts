@@ -1,7 +1,7 @@
 import { ColumnCommonOptions } from 'typeorm/decorator/options/ColumnCommonOptions';
 import { ApiProperty, ApiPropertyOptions } from '@nestjs/swagger';
 import { ColumnWithLengthOptions } from 'typeorm/decorator/options/ColumnWithLengthOptions';
-import { MergePropertyDecorators } from 'nesties';
+import { AnyClass, MergePropertyDecorators } from 'nesties';
 import { Column, Index } from 'typeorm';
 import {
   IsDate,
@@ -146,20 +146,20 @@ export const DateColumn = (
       (v) => {
         const value = v.value;
         if (value == null || value instanceof Date) return value;
-    
+
         const timestampToDate = (t: number, isSeconds: boolean) =>
           new Date(isSeconds ? t * 1000 : t);
-    
+
         if (typeof value === 'number') {
           const isSeconds = !Number.isInteger(value) || value < 1e12;
           return timestampToDate(value, isSeconds);
         }
-    
+
         if (typeof value === 'string' && /^\d+(\.\d+)?$/.test(value)) {
           const isSeconds = value.includes('.') || parseFloat(value) < 1e12;
           return timestampToDate(parseFloat(value), isSeconds);
         }
-    
+
         return new Date(value); // fallback to native parser
       },
       {
@@ -233,3 +233,19 @@ export const NotColumn = (
     }),
     Metadata.set('notColumn', true, 'notColumnFields'),
   ]);
+
+export const RelationComputed =
+  (type?: () => AnyClass): PropertyDecorator =>
+  (obj, propertyKey) => {
+    const fun = () => {
+      const designType = Reflect.getMetadata('design:type', obj, propertyKey);
+      const entityClass = type ? type() : designType;
+      return {
+        entityClass,
+        isArray: designType === Array,
+      };
+    };
+
+    const dec = Metadata.set('relationComputed', fun, 'relationComputedFields');
+    return dec(obj, propertyKey);
+  };

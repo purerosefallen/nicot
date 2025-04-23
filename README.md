@@ -159,13 +159,14 @@ name: string;
 
 NICOT 提供以下装饰器用于控制字段在不同接口中的表现：
 
-| 装饰器名              | 行为控制说明                                           |
-|-----------------------|--------------------------------------------------------|
-| `@NotWritable()`       | 不允许在创建（POST）或修改（PATCH）时传入              |
-| `@NotChangeable()`     | 不允许在修改（PATCH）时更新（只可创建）                |
-| `@NotQueryable()`      | 不允许在 GET 查询参数中使用该字段                      |
-| `@NotInResult()`       | 不会出现在任何返回结果中（如密码字段）                 |
-| `@NotColumn()`         | 不是数据库字段（仅逻辑字段，如计算用字段）              |
+| 装饰器名                                   | 行为控制说明                        |
+|----------------------------------------|-------------------------------|
+| `@NotWritable()`                       | 不允许在创建（POST）或修改（PATCH）时传入     |
+| `@NotChangeable()`                     | 不允许在修改（PATCH）时更新（只可创建）        |
+| `@NotQueryable()`                      | 不允许在 GET 查询参数中使用该字段           |
+| `@NotInResult()`                       | 不会出现在任何返回结果中（如密码字段）           |
+| `@NotColumn()`                         | 不是数据库字段（仅逻辑字段，如计算用字段）         |
+| `@RelationComputed(() => EntityClass)` | 标识该字段依赖关系字段推导而来（通常在 afterGet） |
 
 RestfulFactory 处理 Entity 类的时候，会以这些装饰器为依据，裁剪生成的 DTO 和查询参数。
 
@@ -430,7 +431,7 @@ isActive: boolean;
 ### 示例 Controller
 
 ```ts
-const factory = new RestfulFactory(User);
+const factory = new RestfulFactory(User, { relations: ['articles'] });
 class CreateUserDto extends factory.createDto {}
 class UpdateUserDto extends factory.updateDto {}
 class FindAllUserDto extends factory.findAllDto {}
@@ -477,6 +478,8 @@ export class UserController {
 - 所有的接口都是返回状态码 200。
 - OpenAPI 文档会自动生成，包含所有 DTO 类型与查询参数。
 - Service 需要使用 `CrudService(Entity, options)` 进行标准化实现。
+- `RestfulFactory` 的选项 `options` 支持传入 `relations`，形式和 `CrudService` 一致，用于自动裁剪结果 DTO 字段。
+  - 如果本内容的 `CrudService` 不查询任何关系字段，那么请设置 `{ relations: [] }` 以裁剪所有关系字段。
 
 ---
 
