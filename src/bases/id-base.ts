@@ -62,14 +62,9 @@ export function StringIdBase(idOptions: StringIdOptions) {
       columnExtras: { primary: true, nullable: false },
     }),
     Reflect.metadata('design:type', String),
-    ...(idOptions.uuid ? [
-      Generated('uuid'),
-      NotWritable(),
-    ] : [
-      IsString(),
-      IsNotEmpty(),
-      NotChangeable(),
-    ])
+    ...(idOptions.uuid
+      ? [Generated('uuid'), NotWritable()]
+      : [IsString(), IsNotEmpty(), NotChangeable()]),
   ];
   const dec = MergePropertyDecorators(decs);
   dec(cl.prototype, 'id');
