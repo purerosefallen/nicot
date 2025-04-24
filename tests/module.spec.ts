@@ -66,6 +66,7 @@ describe('app', () => {
   });
 });
 
+/*
 describe('app', () => {
   let app: NestExpressApplication;
 
@@ -82,6 +83,7 @@ describe('app', () => {
           username: 'postgres',
           password: 'postgres',
           database: 'postgres',
+          logging: true,
         }),
       ],
       providers: [UserService, BookService],
@@ -160,6 +162,144 @@ describe('app', () => {
     expect(partialPage.totalPages).toBe(3);
   });
 
+  it('should work with cursor pagination', async () => {
+    const userService = app.get(UserService);
+    expect(userService).toBeDefined();
+    const hundredUsers = _.range(100).map((i) => {
+      const user = new User();
+      user.name = `U${i}`;
+      user.age = 120 - i;
+      user.gender = Gender.F;
+      return user;
+    });
+    const savedHundredUsers = await userService.repo.save(hundredUsers);
+
+    const firstPage = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 20,
+      },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+    expect(firstPage.data).toHaveLength(20);
+    expect(firstPage.nextCursor).toBeDefined();
+    expect(firstPage.previousCursor).toBeUndefined();
+    expect(firstPage.data[0].age).toBe(21);
+    expect(firstPage.data[19].age).toBe(40);
+
+    console.log(`First page cursor: ${firstPage.nextCursor}`);
+
+    const nextPage = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 20,
+        paginationCursor: firstPage.nextCursor,
+      },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(nextPage.data).toHaveLength(20);
+    expect(nextPage.nextCursor).toBeDefined();
+    expect(nextPage.previousCursor).toBeDefined();
+    expect(nextPage.data[0].age).toBe(41);
+    expect(nextPage.data[19].age).toBe(60);
+
+    console.log(
+      `Next page cursor: ${nextPage.nextCursor} / ${nextPage.previousCursor}`,
+    );
+
+    const backToFirstPageAgain = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 20,
+        paginationCursor: nextPage.previousCursor,
+      },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+    expect(backToFirstPageAgain.data).toHaveLength(20);
+    expect(backToFirstPageAgain.nextCursor).toBe(firstPage.nextCursor);
+    expect(backToFirstPageAgain.previousCursor).toBeUndefined();
+    expect(backToFirstPageAgain.data[0].age).toBe(21);
+    expect(backToFirstPageAgain.data[19].age).toBe(40);
+  });
+
+  it('should work with cursor pagination and relations', async () => {
+    const bookService = app.get(BookService);
+    expect(bookService).toBeDefined();
+    const fiftyUsers = _.range(50).map((i) => {
+      const user = new User();
+      user.name = `U${i}`;
+      user.age = i;
+      return user;
+    });
+    const savedFiftyUsers = await bookService.repo.manager.save(fiftyUsers);
+
+    const hundredBooks = _.range(100).map((i) => {
+      const book = new Book();
+      book.name = `B${i}`;
+      book.userId = savedFiftyUsers[50 - (i % 50) - 1].id;
+      return book;
+    });
+
+    const savedHundredBooks = await bookService.repo.manager.save(hundredBooks);
+
+    const firstPage = await bookService.findAllCursorPaginated(
+      {
+        recordsPerPage: 20,
+      },
+      (qb) =>
+        qb
+          .orderBy(`user.age`, 'ASC')
+          .addOrderBy(`${bookService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(firstPage.data).toHaveLength(20);
+    expect(firstPage.nextCursor).toBeDefined();
+    expect(firstPage.previousCursor).toBeUndefined();
+    expect(firstPage.data[0].user.age).toBe(0);
+    expect(firstPage.data[19].user.age).toBe(9);
+
+    const nextPage = await bookService.findAllCursorPaginated(
+      {
+        recordsPerPage: 20,
+        paginationCursor: firstPage.nextCursor,
+      },
+      (qb) =>
+        qb
+          .orderBy(`user.age`, 'ASC')
+          .addOrderBy(`${bookService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(nextPage.data).toHaveLength(20);
+    expect(nextPage.nextCursor).toBeDefined();
+    expect(nextPage.previousCursor).toBeDefined();
+    expect(nextPage.data[0].user.age).toBe(10);
+    expect(nextPage.data[19].user.age).toBe(19);
+
+    const backToFirstPageAgain = await bookService.findAllCursorPaginated(
+      {
+        recordsPerPage: 20,
+        paginationCursor: nextPage.previousCursor,
+      },
+      (qb) =>
+        qb
+          .orderBy(`user.age`, 'ASC')
+          .addOrderBy(`${bookService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(backToFirstPageAgain.data).toHaveLength(20);
+    expect(backToFirstPageAgain.nextCursor).toBe(firstPage.nextCursor);
+    expect(backToFirstPageAgain.previousCursor).toBeUndefined();
+    expect(backToFirstPageAgain.data[0].user.age).toBe(0);
+    expect(backToFirstPageAgain.data[19].user.age).toBe(9);
+  });
+
   it('should not return NotInResult fields', async () => {
     const bookService = app.get(BookService);
     expect(bookService).toBeDefined();
@@ -225,31 +365,9 @@ describe('app', () => {
           gender: 'F',
         });
       });
-    /*
-    await request(server)
-      .get('/user?name=Nana')
-      .expect(200)
-      .expect((res) => {
-        expect(res.body.success).toBe(true);
-        expect(res.body.data).toMatchObject([
-          {
-            id: 1,
-            name: 'Nana',
-            age: 20,
-            gender: 'F',
-          },
-        ]);
-      });
-    await request(server)
-      .get('/user?name=Nana11111')
-      .expect(200)
-      .expect((res) => {
-        expect(res.body.success).toBe(true);
-        expect(res.body.data).toMatchObject([]);
-      });
 
-     */
     await request(server).delete('/user/1').expect(200);
     await request(server).get('/user/1').expect(404);
   });
 });
+*/

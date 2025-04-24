@@ -40,6 +40,10 @@ import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import { getTypeormRelations } from '../utility/get-typeorm-relations';
 import { RelationDef } from '../crud-base';
 import { PageSettingsDto } from '../bases';
+import {
+  CursorPaginationDto,
+  CursorPaginationReturnMessageDto,
+} from '../dto/cursor-pagination';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -105,6 +109,13 @@ export class RestfulFactory<T> {
     ),
     `Find${this.entityClass.name}Dto`,
   ) as ClassType<T>;
+  readonly findAllCursorPaginatedDto = RenameClass(
+    IntersectionType(
+      OmitType(this.findAllDto, ['pageCount' as keyof T]),
+      CursorPaginationDto,
+    ),
+    `Find${this.entityClass.name}CursorPaginatedDto`,
+  ) as unknown as ClassType<T>;
   readonly updateDto = RenameClass(
     PartialType(
       OmitType(
@@ -217,6 +228,8 @@ export class RestfulFactory<T> {
   readonly entityArrayReturnMessageDto = PaginatedReturnMessageDto(
     this.entityResultDto,
   );
+  readonly entityCursorPaginationReturnMessageDto =
+    CursorPaginationReturnMessageDto(this.entityResultDto);
   readonly importReturnMessageDto = ReturnMessageDto([
     ImportEntryDto(this.entityCreateResultDto),
   ]);
@@ -305,6 +318,19 @@ export class RestfulFactory<T> {
         ...extras,
       }),
       ApiOkResponse({ type: this.entityArrayReturnMessageDto }),
+    ]);
+  }
+
+  findAllCursorPaginated(
+    extras: Partial<OperationObject> = {},
+  ): MethodDecorator {
+    return MergeMethodDecorators([
+      this.usePrefix(Get),
+      ApiOperation({
+        summary: `Find all ${this.getEntityClassName()}`,
+        ...extras,
+      }),
+      ApiOkResponse({ type: this.entityCursorPaginationReturnMessageDto }),
     ]);
   }
 

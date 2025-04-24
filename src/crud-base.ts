@@ -26,6 +26,11 @@ import {
 } from 'nesties';
 import { getNotInResultFields, reflector } from './utility/metadata';
 import { getTypeormRelations } from './utility/get-typeorm-relations';
+import {
+  CursorPaginationDto,
+  CursorPaginationReturnMessageDto,
+} from './dto/cursor-pagination';
+import { getPaginatedResult } from './utility/cursor-pagination-utils';
 
 export type EntityId<T extends { id: any }> = T['id'];
 export interface RelationDef {
@@ -70,6 +75,8 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   readonly entityPaginatedReturnMessageDto = PaginatedReturnMessageDto(
     this.entityClass,
   );
+  readonly entityCursorPaginatedReturnMessageDto =
+    CursorPaginationReturnMessageDto(this.entityClass);
   readonly entityRelations: (string | RelationDef)[];
   readonly extraGetQuery: (qb: SelectQueryBuilder<T>) => void;
   readonly log = new ConsoleLogger(`${this.entityClass.name}Service`);
@@ -394,8 +401,8 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     );
   }
 
-  async findAll(
-    ent?: Partial<T & PageSettingsWise>,
+  async _preFindAll(
+    ent?: Partial<T>,
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     extraQuery: (qb: SelectQueryBuilder<T>) => void = () => {},
   ) {
@@ -412,18 +419,57 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       newEnt instanceof PageSettingsDto
         ? newEnt
         : Object.assign(new PageSettingsDto(), newEnt);
-    pageSettings.applyPaginationQuery(query);
     this.extraGetQuery(query);
     extraQuery(query);
+    return { query, newEnt, pageSettings };
+  }
+
+  async findAll(
+    ent?: Partial<T>,
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    extraQuery: (qb: SelectQueryBuilder<T>) => void = () => {},
+  ) {
+    const { query, pageSettings } = await this._preFindAll(ent, extraQuery);
+    pageSettings.applyPaginationQuery(query);
     try {
-      const [ents, count] = await query.getManyAndCount();
-      await Promise.all(ents.map((ent) => ent.afterGet?.()));
+      const [data, count] = await query.getManyAndCount();
+      await Promise.all(data.map((ent) => ent.afterGet?.()));
       return new this.entityPaginatedReturnMessageDto(
         200,
         'success',
-        this.cleanEntityNotInResultFields(ents),
+        this.cleanEntityNotInResultFields(data),
         count,
         pageSettings.getActualPageSettings(),
+      );
+    } catch (e) {
+      const [sql, params] = query.getQueryAndParameters();
+      this.log.error(
+        `Failed to read entity cond ${JSON.stringify(
+          ent,
+        )} with SQL ${sql} param ${params.join(',')}: ${e.toString()}`,
+      );
+      throw new BlankReturnMessageDto(500, 'Internal error').toException();
+    }
+  }
+  async findAllCursorPaginated(
+    ent?: Partial<T & Partial<CursorPaginationDto>>,
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    extraQuery: (qb: SelectQueryBuilder<T>) => void = () => {},
+  ) {
+    const { query, pageSettings } = await this._preFindAll(ent, extraQuery);
+    try {
+      const { data, paginatedResult } = await getPaginatedResult(
+        query,
+        this.entityAliasName,
+        pageSettings.getRecordsPerPage(),
+        ent.paginationCursor,
+      );
+      await Promise.all(data.map((ent) => ent.afterGet?.()));
+      return new this.entityCursorPaginatedReturnMessageDto(
+        200,
+        'success',
+        this.cleanEntityNotInResultFields(data),
+        paginatedResult,
       );
     } catch (e) {
       const [sql, params] = query.getQueryAndParameters();
