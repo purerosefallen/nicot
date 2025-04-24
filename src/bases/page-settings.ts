@@ -13,7 +13,7 @@ export interface QueryWise<T> {
   applyQuery(qb: SelectQueryBuilder<T>, entityName: string): void;
 }
 
-export type QueryCond = <T extends PageSettingsDto>(
+export type QueryCond = <T>(
   obj: T,
   qb: SelectQueryBuilder<T>,
   entityName: string,
@@ -55,25 +55,20 @@ export class PageSettingsDto
   }
 
   getPageCount() {
-    return this.pageCount || 1;
+    return parseInt(this.pageCount as any) || 1;
   }
 
   getRecordsPerPage() {
-    return this.recordsPerPage || 25;
+    return parseInt(this.recordsPerPage as any) || 25;
   }
 
   getStartingFrom() {
     return (this.getPageCount() - 1) * this.getRecordsPerPage();
   }
 
-  applyQuery(qb: SelectQueryBuilder<PageSettingsDto>, entityName: string) {
-    const queryFields = reflector.getArray('queryConditionFields', this);
-    for (const field of queryFields) {
-      const condition = reflector.get('queryCondition', this, field);
-      if (condition) {
-        condition(this, qb, entityName, field as keyof PageSettingsDto);
-      }
-    }
+  applyPaginationQuery(qb: SelectQueryBuilder<any>): void {
     qb.take(this.getRecordsPerPage()).skip(this.getStartingFrom());
   }
+
+  applyQuery(qb: SelectQueryBuilder<any>, entityName: string) {}
 }

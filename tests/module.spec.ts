@@ -54,11 +54,9 @@ describe('app', () => {
   });
 });
 
-
 /*
 describe('app', () => {
   let app: NestExpressApplication;
-
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
@@ -113,7 +111,7 @@ describe('app', () => {
       .expect(200);
     await request(server)
       .get('/user/1')
-      .expect(res => {
+      .expect((res) => {
         expect(res.body.success).toBe(true);
         expect(res.body.data).toMatchObject({
           id: 1,
@@ -122,14 +120,11 @@ describe('app', () => {
           gender: 'F',
         });
       });
-    await request(server)
-      .patch('/user/1')
-      .send({ name: 'Nana' })
-      .expect(200);
+    await request(server).patch('/user/1').send({ name: 'Nana' }).expect(200);
     await request(server)
       .get('/user/1')
       .expect(200)
-      .expect(res => {
+      .expect((res) => {
         expect(res.body.success).toBe(true);
         expect(res.body.data).toMatchObject({
           id: 1,
@@ -141,6 +136,5 @@ describe('app', () => {
     await request(server).delete('/user/1').expect(200);
     await request(server).get('/user/1').expect(404);
   });
-
 });
 */

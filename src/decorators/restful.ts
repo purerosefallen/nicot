@@ -27,6 +27,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiProperty,
+  IntersectionType,
   OmitType,
   PartialType,
 } from '@nestjs/swagger';
@@ -38,6 +39,7 @@ import { RenameClass } from '../utility/rename-class';
 import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import { getTypeormRelations } from '../utility/get-typeorm-relations';
 import { RelationDef } from '../crud-base';
+import { PageSettingsDto } from '../bases';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -92,7 +94,12 @@ export class RestfulFactory<T> {
   readonly findAllDto = RenameClass(
     PartialType(
       OmitType(
-        this.basicInputDto,
+        this.entityClass instanceof PageSettingsDto
+          ? this.basicInputDto
+          : (IntersectionType(
+              this.basicInputDto,
+              PageSettingsDto,
+            ) as unknown as ClassType<T>),
         getSpecificFields(this.entityClass, 'notQueryable') as (keyof T)[],
       ),
     ),

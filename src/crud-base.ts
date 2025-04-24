@@ -11,6 +11,7 @@ import {
 import {
   DeletionWise,
   EntityHooks,
+  PageSettingsDto,
   PageSettingsFactory,
   QueryWise,
 } from './bases';
@@ -23,7 +24,7 @@ import {
   PaginatedReturnMessageDto,
   ReturnMessageDto,
 } from 'nesties';
-import { getNotInResultFields } from './utility/metadata';
+import { getNotInResultFields, reflector } from './utility/metadata';
 import { getTypeormRelations } from './utility/get-typeorm-relations';
 
 export type EntityId<T extends { id: any }> = T['id'];
@@ -51,7 +52,7 @@ export const Inner = (
 
 export type ValidCrudEntity<T> = Record<string, any> & {
   id: any;
-} & Partial<QueryWise<T> & DeletionWise & EntityHooks & PageSettingsFactory>;
+} & Partial<QueryWise<T> & EntityHooks & PageSettingsFactory>;
 
 export interface CrudOptions<T extends ValidCrudEntity<T>> {
   relations?: (string | RelationDef)[];
@@ -280,10 +281,10 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       if (beforeCreate) {
         await beforeCreate(repo);
       }
-      await ent.beforeCreate();
+      await ent.beforeCreate?.();
       try {
         const savedEnt = await repo.save(ent as DeepPartial<T>);
-        await savedEnt.afterCreate();
+        await savedEnt.afterCreate?.();
         return this.cleanEntityNotInResultFields(savedEnt);
       } catch (e) {
         this.log.error(
@@ -299,7 +300,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     return camelCase(this.entityName);
   }
 
-  _applyRelationToQuery(qb: SelectQueryBuilder<T>, relation: RelationDef) {
+  _applyQueryRelation(qb: SelectQueryBuilder<T>, relation: RelationDef) {
     const { name } = relation;
     const relationUnit = name.split('.');
     const base =
@@ -320,14 +321,32 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     );
   }
 
-  _applyRelationsToQuery(qb: SelectQueryBuilder<T>) {
+  _applyQueryRelations(qb: SelectQueryBuilder<T>) {
     for (const relation of this.entityRelations) {
       if (typeof relation === 'string') {
-        this._applyRelationToQuery(qb, { name: relation });
+        this._applyQueryRelation(qb, { name: relation });
       } else {
-        this._applyRelationToQuery(qb, relation);
+        this._applyQueryRelation(qb, relation);
       }
     }
+  }
+
+  _applyQueryFilters(qb: SelectQueryBuilder<T>, ent: T) {
+    const queryFields = reflector.getArray(
+      'queryConditionFields',
+      this.entityClass,
+    );
+    for (const field of queryFields) {
+      const condition = reflector.get(
+        'queryCondition',
+        this.entityClass,
+        field,
+      );
+      if (condition) {
+        condition(ent, qb, this.entityAliasName, field);
+      }
+    }
+    ent.applyQuery?.(qb, this.entityAliasName);
   }
 
   queryBuilder() {
@@ -342,7 +361,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     const query = this.queryBuilder()
       .where(`${this.entityAliasName}.id = :id`, { id })
       .take(1);
-    this._applyRelationsToQuery(query);
+    this._applyQueryRelations(query);
     this.extraGetQuery(query);
     extraQuery(query);
     query.take(1);
@@ -364,7 +383,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         `${this.entityName} ID ${id} not found.`,
       ).toException();
     }
-    await ent.afterGet();
+    await ent.afterGet?.();
     return new this.entityReturnMessageDto(
       200,
       'success',
@@ -381,21 +400,27 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     const newEnt = new this.entityClass();
     if (ent) {
       Object.assign(newEnt, ent);
-      await newEnt.beforeGet();
+      await newEnt?.beforeGet?.();
       newEnt.applyQuery(query, this.entityAliasName);
     }
-    this._applyRelationsToQuery(query);
+    this._applyQueryRelations(query);
+    this._applyQueryFilters(query, newEnt);
+    const pageSettings =
+      newEnt instanceof PageSettingsDto
+        ? newEnt
+        : Object.assign(new PageSettingsDto(), newEnt);
+    pageSettings.applyPaginationQuery(query);
     this.extraGetQuery(query);
     extraQuery(query);
     try {
       const [ents, count] = await query.getManyAndCount();
-      await Promise.all(ents.map((ent) => ent.afterGet()));
+      await Promise.all(ents.map((ent) => ent.afterGet?.()));
       return new this.entityPaginatedReturnMessageDto(
         200,
         'success',
         this.cleanEntityNotInResultFields(ents),
         count,
-        newEnt.getActualPageSettings(),
+        pageSettings.getActualPageSettings(),
       );
     } catch (e) {
       const [sql, params] = query.getQueryAndParameters();
@@ -420,7 +445,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     if (invalidReason) {
       throw new BlankReturnMessageDto(400, invalidReason).toException();
     }
-    await ent.beforeUpdate();
+    await ent.beforeUpdate?.();
     try {
       result = await this.repo.update(
         {
@@ -453,7 +478,9 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       ...cond,
     };
     try {
-      result = await (this.crudOptions.hardDelete
+      result = await (this.crudOptions.hardDelete ||
+      !this.repo.manager.connection.getMetadata(this.entityClass)
+        .deleteDateColumn
         ? this.repo.delete(searchCond)
         : this.repo.softDelete(searchCond));
     } catch (e) {
@@ -497,9 +524,9 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     const remainingEnts = ents.filter(
       (ent) => !invalidResults.find((result) => result.entry === ent),
     );
-    await Promise.all(remainingEnts.map((ent) => ent.beforeCreate()));
+    await Promise.all(remainingEnts.map((ent) => ent.beforeCreate?.()));
     const data = await this._batchCreate(remainingEnts, undefined, true);
-    await Promise.all(data.results.map((e) => e.afterCreate()));
+    await Promise.all(data.results.map((e) => e.afterCreate?.()));
     const results = [
       ...invalidResults,
       ...data.skipped,
