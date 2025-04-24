@@ -665,6 +665,98 @@ GET /user?name=Tom&pageCount=2&recordsPerPage=10
 
 ---
 
+## 🔁 游标分页（Cursor Pagination）
+
+NICOT 支持游标式分页查询（Cursor-based Pagination），相比传统的页码分页，在数据量大、频繁变更或无限滚动的场景中更加稳定可靠。
+
+---
+
+### ✅ 使用方式
+
+定义查询 DTO 时继承工厂生成的游标分页基类：
+
+```ts
+class FindAllUserCursorDto extends factory.findAllCursorPaginatedDto {}
+```
+
+在 Controller 中，使用以下工厂方法：
+
+```ts
+@factory.findAllCursorPaginated()
+async findAll(@factory.findAllParam() dto: FindAllUserCursorDto) {
+return this.service.findAllCursorPaginated(dto);
+}
+```
+
+> ⚠️ 注意：`findAll()` 与 `findAllCursorPaginated()` **不能同时使用**，因为它们会绑定到同一个 GET `/` 路由。请选择其中一种分页模式。
+
+---
+
+### 📥 请求字段说明
+
+| 字段名             | 类型    | 描述                                           |
+|--------------------|---------|------------------------------------------------|
+| `recordsPerPage`   | number  | 每页数据数量，默认 25                          |
+| `paginationCursor` | string  | 上一次请求返回的游标（`nextCursor` 或 `previousCursor`）|
+
+- 首次请求无需传 `paginationCursor`
+- 后续请求使用返回的游标即可获取上一页或下一页数据
+
+---
+
+### 📤 返回结构说明
+
+返回值格式与传统分页一致，但字段不同：
+
+```json
+{
+    "statusCode": 200,
+    "success": true,
+    "message": "success",
+    "timestamp": "2025-04-25T12:00:00.000Z",
+    "data": [{}],
+    "nextCursor": "eyJpZCI6MTAwfQ",
+    "previousCursor": "eyJpZCI6NDB9"
+}
+```
+
+- 游标格式为 Base64URL 编码（安全可用于 URL 参数）
+- `nextCursor` / `previousCursor` 是可选字段，仅在有下一页或上一页时返回
+
+---
+
+### 🔐 兼容性说明
+
+- 所有字段控制装饰器（如 `@NotInResult()`, `@QueryEqual()`, `@NotQueryable()` 等）在游标分页中同样生效
+- 查询参数仍来自实体声明，Swagger 自动生成文档
+- 无需变更现有实体结构，只需更换 `findAllDto` 和分页调用方法
+
+---
+
+### ✅ 适用场景
+
+- 无限滚动分页加载（如微博、时间线）
+- 数据频繁变动（传统分页页数易错）
+- 前后端希望避免“总页数”等全表统计带来的性能消耗
+
+---
+
+### 🧪 示例请求
+
+```http
+GET /user?recordsPerPage=20&paginationCursor=eyJpZCI6MTAwfQ
+```
+
+---
+
+### 🛑 注意事项
+
+- 不支持跳页（如 pageCount = 5 这种跳转）
+- 不再返回 `pageCount`、`totalPages` 等字段
+- 若你的 Controller 中已有 `@factory.findAll()`，请不要再使用游标分页版本
+
+---
+
 ## 📦 统一返回结构与接口注解
 
 NICOT 默认提供统一的接口返回格式与 Swagger 自动注解能力，便于前后端标准化对接。
