@@ -13,8 +13,10 @@
 
 ## 📦 安装
 
+在你的 Nest.js 项目中：
+
 ```bash
-npm install nicot typeorm @nestjs/typeorm class-validator class-transformer reflect-metadata @nestjs/swagger
+npm install nicot @nestjs/config typeorm @nestjs/typeorm class-validator class-transformer reflect-metadata @nestjs/swagger
 ```
 
 ---
@@ -478,8 +480,133 @@ export class UserController {
 - 所有的接口都是返回状态码 200。
 - OpenAPI 文档会自动生成，包含所有 DTO 类型与查询参数。
 - Service 需要使用 `CrudService(Entity, options)` 进行标准化实现。
-- `RestfulFactory` 的选项 `options` 支持传入 `relations`，形式和 `CrudService` 一致，用于自动裁剪结果 DTO 字段。
-  - 如果本内容的 `CrudService` 不查询任何关系字段，那么请设置 `{ relations: [] }` 以裁剪所有关系字段。
+
+---
+
+### 导出 DTO 类
+
+`RestfulFactory` 会自动生成以下 DTO 类：供你导出并在其他的 OpenAPI 装饰器中使用。
+
+```ts
+const factory = new RestfulFactory(User, {
+  relations: ['articles'],
+});
+
+class CreateUserDto extends factory.createDto {} // 创建用 DTO，在 POST /user 中使用
+class UpdateUserDto extends factory.updateDto {} // 更新用 DTO，在 PATCH /user/:id 中使用
+class FindAllUserDto extends factory.findAllDto {} // 查询用 DTO，在 GET /user 中使用
+class UserResultDto extends factory.entityResultDto {} // 查询结果 DTO，在 GET /user/:id 和 GET /user 中返回
+class UserCreateResultDto extends factory.entityCreateResultDto {} // 创建结果 DTO，在 POST /user 中返回。相比 entityResultDto 省略了间接字段和关系字段
+class UserReturnMessageDto extends factory.entityReturnMessageDto {} // 相当于 ReturnMessageDto(UserResultDto)，在 GET /user 中返回
+class UserCreateReturnMessageDto extends factory.entityCreateReturnMessageDto {} // 相当于 ReturnMessageDto(UserCreateResultDto)，在 POST /user 中返回
+class UserArrayResultDto extends factory.entityArrayResultDto {} // 相当于 PaginatedReturnMessageDto(UserResultDto)，在 GET /user 中返回
+```
+
+---
+
+### 关系定义
+
+类似于 `CrudService`，`RestfulFactory` 也需要在配置中定义关系字段。语法和 `CrudService` 的 `relations` 参数完全一致。
+
+```ts
+class User extends IdBase() {
+  @OneToMany(() => Article, article => article.user)
+  articles: Article[];
+
+  @OneToMany(() => Comment, comment => comment.user)
+  comments: Comment[];
+
+  @OneToMany(() => Like, like => like.users)
+  likes: Like[];
+}
+
+class Article extends IdBase() {
+  @ManyToOne(() => User, user => user.articles)
+  user: User;
+
+  @OneToMany(() => Comment, comment => comment.article)
+  comments: Comment[];
+
+  @OneToMany(() => Like, like => like.article)
+  likes: Like[];
+}
+
+class Like extends IdBase() {
+  @ManyToOne(() => User, user => user.likes)
+  user: User;
+
+  @ManyToOne(() => Article, article => article.likes)
+  article: Article;
+}
+
+class Comment extends IdBase() {
+  @ManyToOne(() => Article, article => article.comments)
+  article: Article;
+
+  @ManyToOne(() => User, user => user.articles)
+  user: User;
+}
+
+const factory = new RestfulFactory(User, {
+  relations: ['comments', 'articles', 'articles.comments'], // 生成的 DTO 类中，只含有标明的关系字段，而 articles.user 不会被包含
+});
+
+class UserResultDto extends factory.entityResultDto {
+  // 生成的 DTO 类中包含 comments, articles, articles.comments 字段
+  // 但是不包含 likes, articles.user, articles.likes 等未声明关系字段
+}
+```
+
+如果你的配套 `CrudService` 不准备加载任何关系，那么可以传入空数组：
+
+```ts
+const factory = new RestfulFactory(User, {
+  relations: [], // DTO 不包含任何关系字段
+});
+```
+
+如果不写 `relations`，则默认会尽可能加载所有非 `@NotInResult()` 的关系字段。但现在推荐显式声明需要加载的关系，以避免不必要的 OpenAPI 文档杂乱。
+
+> 这是曾经版本的 nicot (<1.1.9) 的做法。
+
+---
+
+### 依赖关系的间接字段
+
+如果你有实体类，某一间接字段（`@NotColumn()`），依赖某个关系字段，那么需要显示声明这个字段。
+
+```ts
+export class Participant extends IdBase() {
+  @OneToMany(() => Match, match => match.player1)
+  matches1: Match[];
+
+  @OneToMany(() => Match, match => match.player2)
+  matches2: Match[];
+}
+
+export class Match extends IdBase() {
+  @ManyToOne(() => Participant, participant => participant.matches1)
+  player1: Participant;
+  @ManyToOne(() => Participant, participant => participant.matches2)
+  player2: Participant;
+
+  @NotColumn()
+  @RelationComputed(() => Participant) // 声明这个字段依赖于 player1 和 player2 生成，当作关系参与裁剪，避免被拖入 Participant 属性黑洞
+  players: Participant[];
+
+  async afterGet() {
+    this.players = [this.player1, this.player2].filter(s => s);
+  }
+}
+
+const factory = new RestfulFactory(Match, {
+  relations: ['player1', 'player2', 'players'],
+});
+
+class MatchResultDto extends factory.entityResultDto {
+  // 包含 player1, player2, players 字段，但是不包含 player1.matches1, player1.matches2 等间接关系字段
+}
+```
 
 ---
 
@@ -546,10 +673,9 @@ NICOT 默认提供统一的接口返回格式与 Swagger 自动注解能力，�
 
 ### ✅ 返回结构 DTO 类型（用于 Swagger 类型标注）
 
-#### `ReturnMessageDto(EntityClass)`  
-用于生成带数据的标准返回结构类型（**不是直接返回值**，用于 `@nestjs/swagger`）。
+#### `ReturnMessageDto(EntityClass)`
 
-返回结构样式：
+用于生成带数据的标准返回结构类型（**不是直接返回值**，用于 `@nestjs/swagger`）。
 
 ```json
 {
@@ -557,12 +683,41 @@ NICOT 默认提供统一的接口返回格式与 Swagger 自动注解能力，�
   "success": true,
   "message": "success",
   "timestamp": "2025-04-25T12:00:00.000Z",
-  "data": { ... }
+  "data": {}
 }
 ```
 
-#### `BlankReturnMessageDto`  
+#### `BlankReturnMessageDto`
+
 无数据返回结构的类型（用于 DELETE、UPDATE 等空响应）。
+
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "success"
+}
+```
+
+#### `PaginatedReturnMessageDto(EntityClass)`
+
+带有分页信息的返回结构类型。
+
+> EntityClass 会自动变成数组类型。
+
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "message": "success",
+  "timestamp": "2025-04-25T12:00:00.000Z",
+  "data": [{}],
+  "total": 100,
+  "totalPages": 4,
+  "pageCount": 1,
+  "recordsPerPage": 25
+}
+```
 
 ---
 
@@ -815,3 +970,7 @@ NICOT 作为一个 “Entity 驱动” 的框架，在开发体验、安全性�
 - 内建返回结构、Swagger 注解、守卫装饰器等功能
 
 是构建 NestJS 标准化、低重复、文档完善的后端服务的理想选择。
+
+## LICENSE
+
+MIT
