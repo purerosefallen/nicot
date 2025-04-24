@@ -9,7 +9,6 @@ import {
   UpdateResult,
 } from 'typeorm';
 import {
-  DeletionWise,
   EntityHooks,
   PageSettingsDto,
   PageSettingsFactory,
@@ -17,10 +16,11 @@ import {
 } from './bases';
 import { ConsoleLogger } from '@nestjs/common';
 import { camelCase } from 'typeorm/util/StringUtils';
-import _ from 'lodash';
+import _, { omit } from 'lodash';
 import {
   BlankReturnMessageDto,
   ClassType,
+  PageSettingsWise,
   PaginatedReturnMessageDto,
   ReturnMessageDto,
 } from 'nesties';
@@ -73,6 +73,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   readonly entityRelations: (string | RelationDef)[];
   readonly extraGetQuery: (qb: SelectQueryBuilder<T>) => void;
   readonly log = new ConsoleLogger(`${this.entityClass.name}Service`);
+  readonly _typeormRelations = getTypeormRelations(this.entityClass);
 
   constructor(
     public entityClass: ClassType<T>,
@@ -98,8 +99,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         delete o[field];
       }
       visited.add(o);
-      const relations = getTypeormRelations(cl);
-      for (const relation of relations) {
+      for (const relation of this._typeormRelations) {
         const propertyName = relation.propertyName as string;
         if (o[propertyName]) {
           if (Array.isArray(o[propertyName])) {
@@ -249,7 +249,10 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       throw new BlankReturnMessageDto(400, 'Invalid entity').toException();
     }
     let ent = new this.entityClass();
-    Object.assign(ent, _ent);
+    Object.assign(
+      ent,
+      omit(_ent, ...this._typeormRelations.map((r) => r.propertyName)),
+    );
     const invalidReason = ent.isValidInCreate();
     if (invalidReason) {
       throw new BlankReturnMessageDto(400, invalidReason).toException();
@@ -392,7 +395,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   }
 
   async findAll(
-    ent?: Partial<T>,
+    ent?: Partial<T & PageSettingsWise>,
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     extraQuery: (qb: SelectQueryBuilder<T>) => void = () => {},
   ) {
@@ -502,7 +505,10 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   ) {
     const ents = _ents.map((ent) => {
       const newEnt = new this.entityClass();
-      Object.assign(newEnt, ent);
+      Object.assign(
+        newEnt,
+        omit(ents, ...this._typeormRelations.map((r) => r.propertyName)),
+      );
       return newEnt;
     });
     const invalidResults = _.compact(

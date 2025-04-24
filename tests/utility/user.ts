@@ -1,15 +1,17 @@
-import { Entity, Index } from 'typeorm';
+import { Entity, Index, ManyToOne, OneToMany } from 'typeorm';
 import {
   DateColumn,
   EnumColumn,
   IntColumn,
   NotChangeable,
   NotColumn,
+  NotInResult,
   NotWritable,
   QueryEqual,
   StringColumn,
 } from '../../src/decorators';
 import { IdBase, StringIdBase } from '../../src/bases';
+import { Exclude } from 'class-transformer';
 
 export enum Gender {
   F = 'F',
@@ -20,13 +22,6 @@ export class Page {
   id: number;
   name: string;
   book: Book;
-}
-
-export class Book {
-  id: number;
-  name: string;
-  user: User;
-  pages: Page[];
 }
 
 @Entity()
@@ -52,7 +47,26 @@ export class User extends IdBase() {
   @NotColumn()
   birthday: Date;
 
+  @OneToMany(() => Book, (book) => book.user)
   books: Book[];
+}
+
+@Entity()
+export class Book extends IdBase() {
+  @IntColumn('bigint', { unsigned: true })
+  @QueryEqual()
+  userId: number;
+
+  @StringColumn(255)
+  name: string;
+
+  @StringColumn(255)
+  @NotInResult()
+  tag: string;
+
+  @NotColumn()
+  @ManyToOne(() => User, (user) => user.books, { onDelete: 'CASCADE' })
+  user: User;
 }
 
 @Entity()

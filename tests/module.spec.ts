@@ -1,7 +1,7 @@
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Controller, Injectable } from '@nestjs/common';
 import { CrudService } from '../src/crud-base';
-import { Gender, User } from './utility/user';
+import { Book, Gender, User } from './utility/user';
 import { RestfulFactory } from '../src/decorators';
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -13,6 +13,15 @@ import _ from 'lodash';
 class UserService extends CrudService(User) {
   constructor(@InjectDataSource() db: DataSource) {
     super(db.getRepository(User));
+  }
+}
+
+@Injectable()
+class BookService extends CrudService(Book, {
+  relations: ['user'],
+}) {
+  constructor(@InjectDataSource() db: DataSource) {
+    super(db.getRepository(Book));
   }
 }
 
@@ -67,7 +76,7 @@ describe('app', () => {
           type: 'postgres',
           dropSchema: true,
           synchronize: true,
-          entities: [User],
+          entities: [User, Book],
           host: 'localhost',
           port: 5432,
           username: 'postgres',
@@ -75,7 +84,7 @@ describe('app', () => {
           database: 'postgres',
         }),
       ],
-      providers: [UserService],
+      providers: [UserService, BookService],
       controllers: [UserController],
     }).compile();
     app = module.createNestApplication<NestExpressApplication>();
@@ -149,6 +158,41 @@ describe('app', () => {
     expect(partialPage.recordsPerPage).toBe(40);
     expect(partialPage.total).toBe(100);
     expect(partialPage.totalPages).toBe(3);
+  });
+
+  it('should not return NotInResult fields', async () => {
+    const bookService = app.get(BookService);
+    expect(bookService).toBeDefined();
+
+    const book = new Book();
+    book.name = 'book1';
+    book.tag = 'tag1';
+    const savedBook = await bookService.repo.save(book);
+
+    const getBook = await bookService.findOne(savedBook.id);
+    expect(getBook.data.name).toBe('book1');
+    expect(getBook.data.tag).toBeUndefined();
+  });
+
+  it('should work with relations', async () => {
+    const bookService = app.get(BookService);
+    expect(bookService).toBeDefined();
+
+    const user = new User();
+    user.name = 'Yuzu';
+    const savedUser = await bookService.repo.manager.save(user);
+    const book = new Book();
+    book.name = 'book1';
+    book.userId = savedUser.id;
+    const savedBook = await bookService.repo.manager.save(book);
+
+    const getBook = await bookService.findOne(savedBook.id);
+
+    expect(getBook.data.name).toBe('book1');
+    expect(getBook.data.userId).toBe(savedUser.id);
+
+    expect(getBook.data.user).toBeInstanceOf(User);
+    expect(getBook.data.user.name).toBe('Yuzu');
   });
 
   it('should work with controller', async () => {
