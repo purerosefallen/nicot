@@ -6,6 +6,7 @@ import {
   NotChangeable,
   NotColumn,
   NotWritable,
+  QueryEqual,
   StringColumn,
 } from '../../src/decorators';
 import { IdBase, StringIdBase } from '../../src/bases';
@@ -34,6 +35,7 @@ export class User extends IdBase() {
   @StringColumn(5, {
     required: true,
   })
+  @QueryEqual()
   name: string;
 
   @IntColumn('int', { unsigned: true })
