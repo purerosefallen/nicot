@@ -27,17 +27,17 @@ export const QueryOperator = (operator: string, field?: string) =>
   QueryCondition((obj, qb, entityName, key) => {
     if (obj[key] == null) return;
     const fieldName = field || key;
-    const typeormField = `_query_operator_${fieldName}_${key}`;
+    const typeormField = `_query_operator_${entityName}_${fieldName}_${key}`;
     qb.andWhere(`${entityName}.${fieldName} ${operator} :${typeormField}`, {
       [typeormField]: obj[key],
     });
   });
 
-const _createQueryOperator = (operator: string) => (field?: string) =>
+export const createQueryOperator = (operator: string) => (field?: string) =>
   QueryOperator(operator, field);
 
-export const QueryGreater = _createQueryOperator('>');
-export const QueryGreaterEqual = _createQueryOperator('>=');
-export const QueryLess = _createQueryOperator('<');
-export const QueryLessEqual = _createQueryOperator('<=');
-export const QueryNotEqual = _createQueryOperator('!=');
+export const QueryGreater = createQueryOperator('>');
+export const QueryGreaterEqual = createQueryOperator('>=');
+export const QueryLess = createQueryOperator('<');
+export const QueryLessEqual = createQueryOperator('<=');
+export const QueryNotEqual = createQueryOperator('!=');

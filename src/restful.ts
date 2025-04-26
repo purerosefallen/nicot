@@ -473,6 +473,11 @@ export class RestfulFactory<T extends { id: any }> {
         paramTypes: [
           routeOptions.paginateType === 'cursor'
             ? this.findAllCursorPaginatedDto
+            : routeOptions.paginateType === 'none'
+            ? OmitType(this.findAllDto, [
+                'pageCount',
+                'recordsPerPage',
+              ] as (keyof T)[])
             : this.findAllDto,
         ],
         paramDecorators: () => [this.findAllParam()],

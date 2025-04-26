@@ -355,6 +355,32 @@ describe('app', () => {
     expect(getBook.data.user.name).toBe('Yuzu');
   });
 
+  it('should work with query operator', async () => {
+    const userService = app.get(UserService);
+    expect(userService).toBeDefined();
+
+    const users = _.range(20).map((i) => {
+      const user = new User();
+      user.name = `U${i}`;
+      user.age = 20 + i;
+      return user;
+    });
+    const savedUsers = await userService.repo.save(users);
+
+    const getUsers = await userService.findAll(
+      {
+        ageMoreThan: 25,
+        ageLessThan: 30,
+      },
+      (qb) => qb.orderBy('user.age', 'ASC'),
+    );
+
+    // 26-29
+    expect(getUsers.data).toHaveLength(4);
+    expect(getUsers.data[0].age).toBe(26);
+    expect(getUsers.data[3].age).toBe(29);
+  });
+
   const testHttpServer = async (path: string) => {
     const server = await app.getHttpServer();
     await request(server)

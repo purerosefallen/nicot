@@ -7,7 +7,10 @@ import {
   NotColumn,
   NotInResult,
   NotWritable,
+  QueryColumn,
   QueryEqual,
+  QueryGreater,
+  QueryLess,
   StringColumn,
 } from '../../src/decorators';
 import { IdBase, StringIdBase } from '../../src/bases';
@@ -35,6 +38,14 @@ export class User extends IdBase() {
 
   @IntColumn('int', { unsigned: true })
   age: number;
+
+  @QueryColumn()
+  @QueryGreater('age')
+  ageMoreThan: number;
+
+  @QueryColumn()
+  @QueryLess('age')
+  ageLessThan: number;
 
   @NotChangeable()
   @EnumColumn(Gender)

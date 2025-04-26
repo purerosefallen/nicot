@@ -203,15 +203,17 @@ NICOT 提供了一套查询装饰器，用于在 Entity 字段上声明支持的
 
 ### ✅ 内建查询装饰器
 
-| 装饰器名                     | 查询效果                                       |
-|-----------------------------|------------------------------------------------|
-| `@QueryEqual()`              | 精确匹配：`WHERE field = :value`              |
-| `@QueryLike()`               | 前缀模糊匹配：`WHERE field LIKE :value%`      |
-| `@QuerySearch()`             | 宽泛模糊搜索：`WHERE field LIKE %:value%`     |
-| `@QueryMatchBoolean()`       | `true/false/1/0` 转换为布尔类型查询            |
-| `@QueryEqualZeroNullable()`  | `0 → IS NULL`，否则 `= :value`（适合 nullable）|
-| `@QueryGreater()`            | 大于查询：`WHERE field > :value`              |
-| `@QueryOrderBy()`            | 排序字段控制：`ORDER BY field ASC|DESC`      |
+| 装饰器名                          | 查询效果                                     |
+|-------------------------------|------------------------------------------|
+| `@QueryEqual()`               | 精确匹配：`WHERE field = :value`              |
+| `@QueryLike()`                | 前缀模糊匹配：`WHERE field LIKE :value%`        |
+| `@QuerySearch()`              | 宽泛模糊搜索：`WHERE field LIKE %:value%`       |
+| `@QueryMatchBoolean()`        | `true/false/1/0` 转换为布尔类型查询               |
+| `@QueryEqualZeroNullable()`   | `0 → IS NULL`，否则 `= :value`（适合 nullable） |
+| `@QueryGreater(field)`        | 大于查询：`WHERE field > :value`              |
+| `@QueryLess(field)`           | 小于查询：`WHERE field < :value`              |
+| `@QueryGreaterOrEqual(field)` | 大于等于查询：`WHERE field >= :value`           |
+| `@QueryLessOrEqual(field)`      | 小于等于查询：`WHERE field <= :value`           |
 
 ---
 
@@ -754,6 +756,47 @@ GET /user?recordsPerPage=20&paginationCursor=eyJpZCI6MTAwfQ
 - 不支持跳页（如 pageCount = 5 这种跳转）
 - 不再返回 `pageCount`、`totalPages` 等字段
 - 若你的 Controller 中已有 `@factory.findAll()`，请不要再使用游标分页版本
+
+---
+
+## 一键生成 Controller
+
+在一般情况下，可以使用 `factory.restfulController()` 生成 RESTful 控制器，自动处理所有 CRUD 接口。
+
+```ts
+const factory = new RestfulFactory(User, {
+  relations: ['articles'],
+});
+
+@Controller('user')
+class UserController extends factory.restfulController() {
+  constructor(userService: UserService) {
+    super(userService)
+  }
+}
+```
+
+这样就可以自动生成所有 CRUD 接口，无需手动编写。
+
+### 选项
+
+```ts
+class UserController extends factory.restfulController({
+  pagination: 'offset' // findAll 的分页模式。可以是 'offset', 'cursor', 'none'。默认为 'offset'
+  globalMethodDecorators: [ApiError(404, 'Error')] // 每个方法都添加的装饰器
+  routes: {
+    findOne: {
+      methodDecorators: [] // 本方法的装饰器
+    },
+    import: {
+      enabled: false // 禁用该路由
+    },
+    // ...
+  }
+}) {}
+```
+
+> 如果需要覆盖某个方法的实现，请在 `routes` 中设置 `enabled: false`，然后手动实现该方法。
 
 ---
 
