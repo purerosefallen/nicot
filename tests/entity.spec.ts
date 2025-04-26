@@ -1,8 +1,8 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import { RestfulFactory } from '../src/decorators';
 import { getSpecificFields } from '../src/utility/metadata';
 import { Gender, User, User2 } from './utility/user';
+import { RestfulFactory } from '../src/restful';
 
 describe('entity', () => {
   it('creates entity class', () => {

@@ -553,7 +553,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       const newEnt = new this.entityClass();
       Object.assign(
         newEnt,
-        omit(ents, ...this._typeormRelations.map((r) => r.propertyName)),
+        omit(ent, ...this._typeormRelations.map((r) => r.propertyName)),
       );
       return newEnt;
     });

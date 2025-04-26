@@ -9,7 +9,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ImportDataDto, ImportEntryDto } from '../dto';
+import { ImportDataDto, ImportEntryDto } from './dto';
 import {
   AnyClass,
   BlankReturnMessageDto,
@@ -31,19 +31,25 @@ import {
   OmitType,
   PartialType,
 } from '@nestjs/swagger';
-import { CreatePipe, GetPipe, UpdatePipe } from './pipes';
+import { CreatePipe, GetPipe, UpdatePipe } from './decorators/pipes';
 import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import _, { upperFirst } from 'lodash';
-import { getNotInResultFields, getSpecificFields } from '../utility/metadata';
-import { RenameClass } from '../utility/rename-class';
+import { getNotInResultFields, getSpecificFields } from './utility/metadata';
+import { RenameClass } from './utility/rename-class';
 import { DECORATORS } from '@nestjs/swagger/dist/constants';
-import { getTypeormRelations } from '../utility/get-typeorm-relations';
-import { RelationDef } from '../crud-base';
-import { PageSettingsDto } from '../bases';
+import { getTypeormRelations } from './utility/get-typeorm-relations';
+import { CrudBase, RelationDef } from './crud-base';
+import { PageSettingsDto } from './bases';
 import {
   CursorPaginationDto,
   CursorPaginationReturnMessageDto,
-} from '../dto/cursor-pagination';
+} from './dto/cursor-pagination';
+import {
+  BaseRestfulController,
+  RestfulMethods,
+  RestfulPaginateType,
+} from './bases/base-restful-controller';
+import { Repository } from 'typeorm';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -70,7 +76,7 @@ const getNextLevelRelations = (relations: string[], enteringField: string) =>
     .filter((r) => r.includes('.') && r.startsWith(`${enteringField}.`))
     .map((r) => r.split('.').slice(1).join('.'));
 
-export class RestfulFactory<T> {
+export class RestfulFactory<T extends { id: any }> {
   private getEntityClassName() {
     return this.options.entityClassName || this.entityClass.name;
   }
@@ -392,6 +398,7 @@ export class RestfulFactory<T> {
   import(extras: Partial<OperationObject> = {}): MethodDecorator {
     return MergeMethodDecorators([
       Post('import'),
+      HttpCode(200),
       ApiOperation({
         summary: `Import ${this.getEntityClassName()}`,
         ...extras,
@@ -403,5 +410,161 @@ export class RestfulFactory<T> {
         description: 'Internal error',
       }),
     ]);
+  }
+
+  baseController<
+    Options extends Partial<{
+      paginateType: RestfulPaginateType;
+      globalMethodDecorators: MethodDecorator[];
+      routes: Partial<
+        Record<
+          RestfulMethods,
+          Partial<{
+            enabled: boolean;
+            methodDecorators: MethodDecorator[];
+          }>
+        >
+      >;
+    }> = {},
+  >(routeOptions: Options = {} as Options) {
+    // 计算出哪些是 disabled 的方法
+    type ExplicitlyDisabledMethods = {
+      [M in keyof Options['routes']]: Options['routes'][M] extends {
+        enabled: false;
+      }
+        ? M
+        : never;
+    }[keyof Options['routes']];
+
+    const _this = this;
+
+    const cl =
+      class SpecificRestfulController extends BaseRestfulController<T> {
+        constructor(service: CrudBase<T> | Repository<T>) {
+          super(service, {
+            paginateType: routeOptions.paginateType || 'offset',
+            relations: _this.options.relations,
+            entityClass: _this.entityClass,
+          });
+        }
+      } as new (service: CrudBase<T> | Repository<T>) => Omit<
+        BaseRestfulController<T>,
+        ExplicitlyDisabledMethods
+      >;
+
+    const validMethods = RestfulMethods.filter(
+      (m) => routeOptions?.routes?.[m]?.enabled !== false,
+    );
+
+    const useDecorators: Record<
+      RestfulMethods,
+      {
+        paramDecorators: () => ParameterDecorator[];
+        paramTypes: AnyClass[];
+        methodDecorators: () => MethodDecorator[];
+      }
+    > = {
+      findOne: {
+        paramTypes: [this.idType as AnyClass],
+        paramDecorators: () => [this.idParam()],
+        methodDecorators: () => [this.findOne()],
+      },
+      findAll: {
+        paramTypes: [
+          routeOptions.paginateType === 'cursor'
+            ? this.findAllCursorPaginatedDto
+            : this.findAllDto,
+        ],
+        paramDecorators: () => [this.findAllParam()],
+        methodDecorators: () => [
+          routeOptions.paginateType === 'cursor'
+            ? this.findAllCursorPaginated()
+            : this.findAll(),
+        ],
+      },
+      create: {
+        paramTypes: [this.createDto],
+        paramDecorators: () => [this.createParam()],
+        methodDecorators: () => [this.create()],
+      },
+      update: {
+        paramTypes: [this.idType as AnyClass, this.updateDto],
+        paramDecorators: () => [this.idParam(), this.updateParam()],
+        methodDecorators: () => [this.update()],
+      },
+      delete: {
+        paramTypes: [this.idType as AnyClass],
+        paramDecorators: () => [this.idParam()],
+        methodDecorators: () => [this.delete()],
+      },
+      import: {
+        paramTypes: [this.importDto],
+        paramDecorators: () => [this.createParam()],
+        methodDecorators: () => [this.import()],
+      },
+    };
+
+    for (const method of validMethods) {
+      // 1. Override 继承方法，让它成为自己的（以便能装饰）
+      cl.prototype[method] = function (...args: any[]) {
+        return BaseRestfulController.prototype[method].apply(this, args);
+      };
+
+      const paramDecorators = useDecorators[method].paramDecorators();
+      const paramTypes = useDecorators[method].paramTypes;
+      const methodDecorators = [
+        ...useDecorators[method].methodDecorators(),
+        ...(routeOptions?.routes?.[method]?.methodDecorators || []),
+        ...(routeOptions?.globalMethodDecorators || []),
+      ];
+
+      // 2. 先打参数装饰器
+      paramDecorators.forEach((paramDecorator, index) => {
+        paramDecorator(cl.prototype, method, index);
+      });
+
+      // 3. 打 Reflect Metadata（design:paramtypes）
+      Reflect.defineMetadata(
+        'design:paramtypes',
+        paramTypes,
+        cl.prototype,
+        method,
+      );
+
+      // 4. 打 Reflect Metadata（design:type 和 design:returntype）
+      const baseDescriptor = Object.getOwnPropertyDescriptor(
+        BaseRestfulController.prototype,
+        method,
+      );
+      if (baseDescriptor) {
+        // 方法是 function
+        Reflect.defineMetadata(
+          'design:type',
+          baseDescriptor.value,
+          cl.prototype,
+          method,
+        );
+
+        // 这里 return type 通常可以是 Promise<any>，但如果你有更具体的类型，可以扩展
+        Reflect.defineMetadata(
+          'design:returntype',
+          Promise,
+          cl.prototype,
+          method,
+        );
+      }
+
+      // 5. 再打方法装饰器
+      methodDecorators.forEach((methodDecorator) => {
+        const descriptor = Object.getOwnPropertyDescriptor(
+          cl.prototype,
+          method,
+        )!;
+        methodDecorator(cl.prototype, method, descriptor);
+        Object.defineProperty(cl.prototype, method, descriptor);
+      });
+    }
+
+    return RenameClass(cl, `${this.getEntityClassName()}Controller`);
   }
 }

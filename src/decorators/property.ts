@@ -25,7 +25,7 @@ import { BigintTransformer } from '../utility/bigint';
 import { Metadata } from '../utility/metadata';
 import { ClassOrArray, getClassFromClassOrArray, ParseType } from 'nesties';
 import { TypeTransformer } from '../utility/type-transformer';
-import { NotQueryable } from './access';
+import { NotInResult, NotQueryable, NotWritable } from './access';
 
 export interface OpenAPIOptions<T> {
   description?: string;
@@ -232,6 +232,18 @@ export const NotColumn = (
       ...options,
     }),
     Metadata.set('notColumn', true, 'notColumnFields'),
+  ]);
+
+export const QueryColumn = (
+  options: OpenAPIOptions<any> = {},
+): PropertyDecorator =>
+  MergePropertyDecorators([
+    NotWritable(),
+    NotInResult(),
+    swaggerDecorator({
+      required: false,
+      ...options,
+    }),
   ]);
 
 export const RelationComputed =

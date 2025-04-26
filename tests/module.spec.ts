@@ -2,12 +2,12 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { Controller, Injectable } from '@nestjs/common';
 import { CrudService } from '../src/crud-base';
 import { Book, Gender, User } from './utility/user';
-import { RestfulFactory } from '../src/decorators';
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import _ from 'lodash';
+import { RestfulFactory } from '../src/restful';
 
 @Injectable()
 class UserService extends CrudService(User) {
@@ -29,6 +29,7 @@ const dec = new RestfulFactory(User);
 class FindAllUserDto extends dec.findAllDto {}
 class UpdateUserDto extends dec.updateDto {}
 class CreateUserDto extends dec.createDto {}
+class ImportUserDto extends dec.importDto {}
 
 @Controller('user')
 class UserController {
@@ -57,6 +58,25 @@ class UserController {
   @dec.delete()
   delete(@dec.idParam() id: number) {
     return this.userService.delete(id);
+  }
+
+  @dec.import()
+  import(@dec.createParam() data: ImportUserDto) {
+    return this.userService.importEntities(data.data);
+  }
+}
+
+@Controller('user2')
+class UserController2 extends dec.baseController() {
+  constructor(userService: UserService) {
+    super(userService);
+  }
+}
+
+@Controller('user3')
+class SingleUserController extends dec.baseController() {
+  constructor(@InjectDataSource() db: DataSource) {
+    super(db.getRepository(User));
   }
 }
 
@@ -87,7 +107,7 @@ describe('app', () => {
         }),
       ],
       providers: [UserService, BookService],
-      controllers: [UserController],
+      controllers: [UserController, UserController2, SingleUserController],
     }).compile();
     app = module.createNestApplication<NestExpressApplication>();
     await app.init();
@@ -335,14 +355,14 @@ describe('app', () => {
     expect(getBook.data.user.name).toBe('Yuzu');
   });
 
-  it('should work with controller', async () => {
+  const testHttpServer = async (path: string) => {
     const server = await app.getHttpServer();
     await request(server)
-      .post('/user')
+      .post(`/${path}`)
       .send({ name: 'Yuzu', age: 20, gender: 'F' })
       .expect(200);
     await request(server)
-      .get('/user/1')
+      .get(`/${path}/1`)
       .expect((res) => {
         expect(res.body.success).toBe(true);
         expect(res.body.data).toMatchObject({
@@ -352,9 +372,30 @@ describe('app', () => {
           gender: 'F',
         });
       });
-    await request(server).patch('/user/1').send({ name: 'Nana' }).expect(200);
     await request(server)
-      .get('/user/1')
+      .get(`/${path}?name=Yuzu`)
+      .expect((res) => {
+        expect(res.body.success).toBe(true);
+        expect(res.body.data[0]).toMatchObject({
+          id: 1,
+          name: 'Yuzu',
+          age: 20,
+          gender: 'F',
+        });
+      });
+    await request(server)
+      .get(`/${path}?name=Yume`)
+      .expect((res) => {
+        expect(res.body.success).toBe(true);
+        expect(res.body.data).toHaveLength(0);
+      });
+
+    await request(server)
+      .patch(`/${path}/1`)
+      .send({ name: 'Nana' })
+      .expect(200);
+    await request(server)
+      .get(`/${path}/1`)
       .expect(200)
       .expect((res) => {
         expect(res.body.success).toBe(true);
@@ -365,9 +406,61 @@ describe('app', () => {
           gender: 'F',
         });
       });
+    await request(server).delete(`/${path}/1`).expect(200);
+    await request(server).get(`/${path}/1`).expect(404);
+    await request(server)
+      .post(`/${path}/import`)
+      .send({
+        data: [
+          {
+            name: 'Hana',
+            age: 19,
+            gender: 'F',
+          },
+          {
+            name: 'Miko',
+            age: 20,
+            gender: 'F',
+          },
+        ],
+      })
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.success).toBe(true);
+        expect(res.body.data).toHaveLength(2);
+        expect(res.body.data[0].entry.name).toBe('Hana');
+        expect(res.body.data[0].entry.age).toBe(19);
+        expect(res.body.data[1].entry.name).toBe('Miko');
+        expect(res.body.data[1].entry.age).toBe(20);
+      });
+    await request(server)
+      .get(`/${path}?name=Hana`)
+      .expect((res) => {
+        expect(res.body.success).toBe(true);
+        expect(res.body.data).toHaveLength(1);
+        expect(res.body.data[0].name).toBe('Hana');
+        expect(res.body.data[0].age).toBe(19);
+      });
+    await request(server)
+      .get(`/${path}?name=Miko`)
+      .expect((res) => {
+        expect(res.body.success).toBe(true);
+        expect(res.body.data).toHaveLength(1);
+        expect(res.body.data[0].name).toBe('Miko');
+        expect(res.body.data[0].age).toBe(20);
+      });
+  };
 
-    await request(server).delete('/user/1').expect(200);
-    await request(server).get('/user/1').expect(404);
+  it('should work with controller', async () => {
+    await testHttpServer('user');
+  });
+
+  it('should work with controller (generated)', async () => {
+    await testHttpServer('user2');
+  });
+
+  it('should work with controller (generated single file)', async () => {
+    await testHttpServer('user3');
   });
 });
 */
