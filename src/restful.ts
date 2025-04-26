@@ -428,13 +428,10 @@ export class RestfulFactory<T extends { id: any }> {
     }> = {},
   >(routeOptions: Options = {} as Options) {
     // 计算出哪些是 disabled 的方法
+    type Routes = NonNullable<Options['routes']>;
     type ExplicitlyDisabledMethods = {
-      [M in keyof Options['routes']]: Options['routes'][M] extends {
-        enabled: false;
-      }
-        ? M
-        : never;
-    }[keyof Options['routes']];
+      [M in keyof Routes]: Routes[M] extends { enabled: false } ? M : never;
+    }[keyof Routes];
 
     const _this = this;
 

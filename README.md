@@ -761,7 +761,7 @@ GET /user?recordsPerPage=20&paginationCursor=eyJpZCI6MTAwfQ
 
 ## 一键生成 Controller
 
-在一般情况下，可以使用 `factory.restfulController()` 生成 RESTful 控制器，自动处理所有 CRUD 接口。
+在一般情况下，可以使用 `factory.baseController()` 生成 RESTful 控制器，自动处理所有 CRUD 接口。
 
 ```ts
 const factory = new RestfulFactory(User, {
@@ -769,7 +769,7 @@ const factory = new RestfulFactory(User, {
 });
 
 @Controller('user')
-class UserController extends factory.restfulController() {
+class UserController extends factory.baseController() {
   constructor(userService: UserService) {
     super(userService)
   }
@@ -781,7 +781,7 @@ class UserController extends factory.restfulController() {
 ### 选项
 
 ```ts
-class UserController extends factory.restfulController({
+class UserController extends factory.baseController({
   pagination: 'offset' // findAll 的分页模式。可以是 'offset', 'cursor', 'none'。默认为 'offset'
   globalMethodDecorators: [ApiError(404, 'Error')] // 每个方法都添加的装饰器
   routes: {
