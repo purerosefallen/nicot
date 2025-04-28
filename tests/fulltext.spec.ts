@@ -21,6 +21,7 @@ class Article extends IdBase() {
 
   @QueryFullText({
     configuration: 'english',
+    orderBySimilarity: true,
   })
   @StringColumn(10000)
   englishContent: string;
@@ -94,7 +95,6 @@ describe('fulltext', () => {
     });
     expect(queryForcedCorrect.data).toHaveLength(1);
 
-
     const queryWithPunctuation = await articleService.findAll({
       chineseContent: '今天天气不错。',
     });
@@ -150,6 +150,54 @@ describe('fulltext', () => {
       englishContent: 'The weather is nice today.',
     });
     expect(queryWithPunctuation.data).toHaveLength(1);
+  });
+
+  it('should order by similarity', async () => {
+    const articleService = app.get(ArticleService);
+
+    // 插入数据，控制关键词密度
+    const articles = [
+      {
+        name: 'Weather Blast',
+        englishContent: 'Weather weather weather everywhere today!',
+      },
+      {
+        name: 'Perfect Weather',
+        englishContent: 'The weather is absolutely perfect today.',
+      },
+      {
+        name: 'Nice Day',
+        englishContent: 'It is a nice day with sunny skies.',
+      },
+      {
+        name: 'Random News',
+        englishContent: 'The stock market fluctuated wildly today.',
+      },
+    ];
+
+    await articleService.repo.save(
+      articles.map((a) => Object.assign(new Article(), a)),
+    );
+
+    // 搜索关键词
+    const result = await articleService.findAll({
+      englishContent: 'weather',
+    });
+
+    console.log(
+      'Order by similarity:',
+      result.data.map((d) => d.name),
+    );
+
+    // 验证顺序（根据匹配度高低）
+    expect(result.data.length).toBe(2); // 只搜到了2条有关weather的
+    expect(result.data[0].name).toBe('Weather Blast'); // 多次出现，应排第一
+    expect(result.data[1].name).toBe('Perfect Weather'); // 出现一次，应排第二
+
+    // 验证其他无关的文章没有被搜到
+    const names = result.data.map((d) => d.name);
+    expect(names).not.toContain('Nice Day');
+    expect(names).not.toContain('Random News');
   });
 });
 */

@@ -230,6 +230,7 @@ NICOT 提供了一套查询装饰器，用于在 Entity 字段上声明支持的
 @QueryFullText({ 
   configuration: 'english', // 使用 postgres 搜索配置
   tsQueryFunction: 'websearch_to_tsquery'// 使用的 tsquery 函数。默认为 websearch_to_tsquery
+  orderBySimilarity: true, // 使用相似度排序
 })
 englishContent: string;
 

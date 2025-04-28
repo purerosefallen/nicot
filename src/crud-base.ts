@@ -355,7 +355,6 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         condition(ent, qb, this.entityAliasName, field);
       }
     }
-    ent.applyQuery?.(qb, this.entityAliasName);
   }
 
   queryBuilder() {

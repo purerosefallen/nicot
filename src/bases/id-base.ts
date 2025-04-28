@@ -12,6 +12,7 @@ import { MergePropertyDecorators } from 'nesties';
 
 export interface IdOptions {
   description?: string;
+  noOrderById?: boolean;
 }
 
 export function IdBase(idOptions: IdOptions = {}) {
@@ -19,7 +20,9 @@ export function IdBase(idOptions: IdOptions = {}) {
     id: number;
     override applyQuery(qb: SelectQueryBuilder<IdBase>, entityName: string) {
       super.applyQuery(qb, entityName);
-      qb.orderBy(`${entityName}.id`, 'DESC');
+      if (!idOptions.noOrderById) {
+        qb.orderBy(`${entityName}.id`, 'DESC');
+      }
       applyQueryProperty(this, qb, entityName, 'id');
     }
   };
@@ -51,6 +54,7 @@ export function StringIdBase(idOptions: StringIdOptions) {
       entityName: string,
     ) {
       super.applyQuery(qb, entityName);
+      console.log('idbase order by');
       qb.orderBy(`${entityName}.id`, 'ASC');
       applyQueryProperty(this, qb, entityName, 'id');
     }

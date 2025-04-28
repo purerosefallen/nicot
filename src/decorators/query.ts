@@ -9,6 +9,7 @@ import {
 } from '../utility';
 import { QueryFullTextColumnOptions } from '../utility/query-full-text-column-options.interface';
 import { MergePropertyDecorators } from 'nesties';
+import { unshiftOrderBy } from '../utility/unshift-order-by';
 
 export const QueryCondition = (cond: QueryCond) =>
   Metadata.set(
@@ -55,12 +56,21 @@ export const QueryFullText = (options: QueryFullTextColumnOptions = {}) => {
       const fieldName = key;
       const typeormField = key;
 
-      qb.andWhere(
-        `to_tsvector('${configurationName}', "${entityName}"."${fieldName}") @@ ${tsQueryFunction}('${configurationName}', :${typeormField})`,
-        {
-          [typeormField]: obj[key],
-        },
-      );
+      const tsVectorStatement = `to_tsvector('${configurationName}', "${entityName}"."${fieldName}")`;
+      const tsQueryStatement = `${tsQueryFunction}('${configurationName}', :${typeormField})`;
+
+      qb.andWhere(`${tsVectorStatement} @@ ${tsQueryStatement}`, {
+        [typeormField]: obj[key],
+      });
+
+      if (options.orderBySimilarity) {
+        const rankVirtualField = `_fulltext_rank_${key}`;
+        qb.addSelect(
+          `ts_rank(${tsVectorStatement}, ${tsQueryStatement})`,
+          rankVirtualField,
+        );
+        unshiftOrderBy(qb, `"${rankVirtualField}"`, 'DESC');
+      }
     }),
     Metadata.set(
       'queryFullTextColumn',
