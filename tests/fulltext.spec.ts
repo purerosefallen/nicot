@@ -78,6 +78,32 @@ describe('fulltext', () => {
       chineseContent: '气候',
     });
     expect(incorrectQuery.data).toHaveLength(0);
+
+    const queryForTwoWords = await articleService.findAll({
+      chineseContent: '今天 不错',
+    });
+    expect(queryForTwoWords.data).toHaveLength(1);
+
+    const queryForTwoWordsWithDifferentOrder = await articleService.findAll({
+      chineseContent: '不错 今天',
+    });
+    expect(queryForTwoWordsWithDifferentOrder.data).toHaveLength(1);
+
+    const queryForcedCorrect = await articleService.findAll({
+      chineseContent: '"今天天气"',
+    });
+    expect(queryForcedCorrect.data).toHaveLength(1);
+
+
+    const queryWithPunctuation = await articleService.findAll({
+      chineseContent: '今天天气不错。',
+    });
+    expect(queryWithPunctuation.data).toHaveLength(1);
+
+    const queryWithPunctuationIncorrect = await articleService.findAll({
+      chineseContent: '今天天气不错！',
+    });
+    expect(queryWithPunctuationIncorrect.data).toHaveLength(0);
   });
 
   it('should filter English fulltext', async () => {
@@ -98,6 +124,32 @@ describe('fulltext', () => {
       englishContent: 'climate',
     });
     expect(incorrectQuery.data).toHaveLength(0);
+
+    const queryForTwoWords = await articleService.findAll({
+      englishContent: 'weather nice',
+    });
+    expect(queryForTwoWords.data).toHaveLength(1);
+
+    const queryForTwoWordsWithDifferentOrder = await articleService.findAll({
+      englishContent: 'nice weather',
+    });
+    expect(queryForTwoWordsWithDifferentOrder.data).toHaveLength(1);
+
+    const queryForcedCorrect = await articleService.findAll({
+      englishContent: '"The weather"',
+    });
+
+    expect(queryForcedCorrect.data).toHaveLength(1);
+
+    const queryForcedIncorrect = await articleService.findAll({
+      englishContent: '"weather nice"',
+    });
+    expect(queryForcedIncorrect.data).toHaveLength(0);
+
+    const queryWithPunctuation = await articleService.findAll({
+      englishContent: 'The weather is nice today.',
+    });
+    expect(queryWithPunctuation.data).toHaveLength(1);
   });
 });
 */

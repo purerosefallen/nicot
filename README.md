@@ -204,18 +204,41 @@ NICOT 提供了一套查询装饰器，用于在 Entity 字段上声明支持的
 
 ### ✅ 内建查询装饰器
 
-| 装饰器名                                         | 查询效果                                     |
-|----------------------------------------------|------------------------------------------|
-| `@QueryEqual()`                              | 精确匹配：`WHERE field = :value`              |
-| `@QueryLike()`                               | 前缀模糊匹配：`WHERE field LIKE :value%`        |
-| `@QuerySearch()`                             | 宽泛模糊搜索：`WHERE field LIKE %:value%`       |
-| `@QueryMatchBoolean()`                       | `true/false/1/0` 转换为布尔类型查询               |
-| `@QueryEqualZeroNullable()`                  | `0 → IS NULL`，否则 `= :value`（适合 nullable） |
-| `@QueryGreater(field)`                       | 大于查询：`WHERE field > :value`              |
-| `@QueryLess(field)`                          | 小于查询：`WHERE field < :value`              |
-| `@QueryGreaterOrEqual(field)`                | 大于等于查询：`WHERE field >= :value`           |
-| `@QueryLessOrEqual(field)`                   | 小于等于查询：`WHERE field <= :value`           |
-| `@QueryFullText({ configration?, parser? })` | 全文搜索查询，只支持 PostgreSQL，会自动建索引             |
+| 装饰器名                          | 查询效果                                     |
+|-------------------------------|------------------------------------------|
+| `@QueryEqual()`               | 精确匹配：`WHERE field = :value`              |
+| `@QueryLike()`                | 前缀模糊匹配：`WHERE field LIKE :value%`        |
+| `@QuerySearch()`              | 宽泛模糊搜索：`WHERE field LIKE %:value%`       |
+| `@QueryMatchBoolean()`        | `true/false/1/0` 转换为布尔类型查询               |
+| `@QueryEqualZeroNullable()`   | `0 → IS NULL`，否则 `= :value`（适合 nullable） |
+| `@QueryGreater(field)`        | 大于查询：`WHERE field > :value`              |
+| `@QueryLess(field)`           | 小于查询：`WHERE field < :value`              |
+| `@QueryGreaterOrEqual(field)` | 大于等于查询：`WHERE field >= :value`           |
+| `@QueryLessOrEqual(field)`    | 小于等于查询：`WHERE field <= :value`           |
+| `@QueryFullText(options)`     | 全文搜索查询，只支持 PostgreSQL，会自动建索引             |
+
+---
+
+### 全文搜索
+
+利用 `@QueryFullText(options)` 装饰器，可以在 PostgreSQL 中实现全文搜索。
+
+程序启动的时候，会自动创建索引。不需要加 `@Index()`。
+
+```ts
+@StringColumn(255)
+@QueryFullText({ 
+  configuration: 'english', // 使用 postgres 搜索配置
+  tsQueryFunction: 'websearch_to_tsquery'// 使用的 tsquery 函数。默认为 websearch_to_tsquery
+})
+englishContent: string;
+
+@StringColumn(255)
+@QueryFullText({
+  parser: 'zhparser', // 使用中文分词器。NICOT 自动管理配置。需要手动给 postgres 添加中文分词器
+})
+simpleContent: string;
+```
 
 ---
 

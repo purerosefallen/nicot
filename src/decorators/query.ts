@@ -48,6 +48,7 @@ export const QueryFullText = (options: QueryFullTextColumnOptions = {}) => {
   const configurationName = options.parser
     ? `nicot_parser_${options.parser}`
     : options.configuration || 'english';
+  const tsQueryFunction = options.tsQueryFunction || 'websearch_to_tsquery';
   return MergePropertyDecorators([
     QueryCondition((obj, qb, entityName, key) => {
       if (obj[key] == null) return;
@@ -55,7 +56,7 @@ export const QueryFullText = (options: QueryFullTextColumnOptions = {}) => {
       const typeormField = key;
 
       qb.andWhere(
-        `to_tsvector('${configurationName}', "${entityName}"."${fieldName}") @@ to_tsquery('${configurationName}', :${typeormField})`,
+        `to_tsvector('${configurationName}', "${entityName}"."${fieldName}") @@ ${tsQueryFunction}('${configurationName}', :${typeormField})`,
         {
           [typeormField]: obj[key],
         },
