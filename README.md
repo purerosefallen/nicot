@@ -161,14 +161,15 @@ name: string;
 
 NICOT 提供以下装饰器用于控制字段在不同接口中的表现：
 
-| 装饰器名                                   | 行为控制说明                        |
-|----------------------------------------|-------------------------------|
-| `@NotWritable()`                       | 不允许在创建（POST）或修改（PATCH）时传入     |
-| `@NotChangeable()`                     | 不允许在修改（PATCH）时更新（只可创建）        |
-| `@NotQueryable()`                      | 不允许在 GET 查询参数中使用该字段           |
-| `@NotInResult()`                       | 不会出现在任何返回结果中（如密码字段）           |
-| `@NotColumn()`                         | 不是数据库字段（仅逻辑字段，如计算用字段）         |
-| `@RelationComputed(() => EntityClass)` | 标识该字段依赖关系字段推导而来（通常在 afterGet） |
+| 装饰器名                                   | 行为控制说明                                        |
+|----------------------------------------|-----------------------------------------------|
+| `@NotWritable()`                       | 不允许在创建（POST）或修改（PATCH）时传入                     |
+| `@NotChangeable()`                     | 不允许在修改（PATCH）时更新（只可创建）                        |
+| `@NotQueryable()`                      | 不允许在 GET 查询参数中使用该字段                           |
+| `@NotInResult()`                       | 不会出现在任何返回结果中（如密码字段）                           |
+| `@NotColumn()`                         | 不是数据库字段，仅作为查询结果间接字段（在 afterGet 钩子方法赋值）        |
+| `@QueryColumn()`                       | 不是数据库字段，仅作为虚拟查询字段（和 @QueryEqual() 等查询装饰器同时使用） |
+| `@RelationComputed(() => EntityClass)` | 标识该字段依赖关系字段推导而来（通常在 afterGet）                 |
 
 RestfulFactory 处理 Entity 类的时候，会以这些装饰器为依据，裁剪生成的 DTO 和查询参数。
 
@@ -203,17 +204,18 @@ NICOT 提供了一套查询装饰器，用于在 Entity 字段上声明支持的
 
 ### ✅ 内建查询装饰器
 
-| 装饰器名                          | 查询效果                                     |
-|-------------------------------|------------------------------------------|
-| `@QueryEqual()`               | 精确匹配：`WHERE field = :value`              |
-| `@QueryLike()`                | 前缀模糊匹配：`WHERE field LIKE :value%`        |
-| `@QuerySearch()`              | 宽泛模糊搜索：`WHERE field LIKE %:value%`       |
-| `@QueryMatchBoolean()`        | `true/false/1/0` 转换为布尔类型查询               |
-| `@QueryEqualZeroNullable()`   | `0 → IS NULL`，否则 `= :value`（适合 nullable） |
-| `@QueryGreater(field)`        | 大于查询：`WHERE field > :value`              |
-| `@QueryLess(field)`           | 小于查询：`WHERE field < :value`              |
-| `@QueryGreaterOrEqual(field)` | 大于等于查询：`WHERE field >= :value`           |
-| `@QueryLessOrEqual(field)`      | 小于等于查询：`WHERE field <= :value`           |
+| 装饰器名                                         | 查询效果                                     |
+|----------------------------------------------|------------------------------------------|
+| `@QueryEqual()`                              | 精确匹配：`WHERE field = :value`              |
+| `@QueryLike()`                               | 前缀模糊匹配：`WHERE field LIKE :value%`        |
+| `@QuerySearch()`                             | 宽泛模糊搜索：`WHERE field LIKE %:value%`       |
+| `@QueryMatchBoolean()`                       | `true/false/1/0` 转换为布尔类型查询               |
+| `@QueryEqualZeroNullable()`                  | `0 → IS NULL`，否则 `= :value`（适合 nullable） |
+| `@QueryGreater(field)`                       | 大于查询：`WHERE field > :value`              |
+| `@QueryLess(field)`                          | 小于查询：`WHERE field < :value`              |
+| `@QueryGreaterOrEqual(field)`                | 大于等于查询：`WHERE field >= :value`           |
+| `@QueryLessOrEqual(field)`                   | 小于等于查询：`WHERE field <= :value`           |
+| `@QueryFullText({ configration?, parser? })` | 全文搜索查询，只支持 PostgreSQL，会自动建索引             |
 
 ---
 
@@ -272,7 +274,31 @@ isPublished: boolean;
 viewsOrderBy?: 'ASC' | 'DESC';
 ```
 
+---
 
+## 🧩 实体关系示例
+
+```ts
+@Entity()
+class Article extends IdBase() {
+  @QueryEqual()
+  @IntColumn('bigint', { unsigned: true })
+  userId: number;
+
+  @ManyToOne(() => User, user => user.articles, { onDelete: 'CASCADE' })
+  user: User;
+}
+
+@Entity()
+class User extends IdBase() {
+  @OneToMany(() => Article, article => article.user)
+  articles: Article[];
+
+  async afterGet() {
+    this.articleCount = this.articles.length;
+  }
+}
+```
 
 ---
 
@@ -658,7 +684,7 @@ class LogEntry extends IdBase() {
 
 ### 示例：分页 + 条件查询
 
-```ts
+```
 GET /user?name=Tom&pageCount=2&recordsPerPage=10
 // 查询第 2 页，每页 10 条，筛选 name = Tom 的用户
 ```
@@ -797,6 +823,58 @@ class UserController extends factory.baseController({
 ```
 
 > 如果需要覆盖某个方法的实现，请在 `routes` 中设置 `enabled: false`，然后手动实现该方法。
+
+---
+
+## 一键生成 CrudService
+
+利用 `factory.crudService()` 生成标准的 CRUD 服务类，自动处理所有 CRUD 接口。效果与 `CrudService(Entity, options)` 类似。
+
+`relations` 的配置与 `RestfulFactory` 的 `relations` 参数一致，保证 DTO 与查询参数的一致性。
+
+```ts
+const factory = new RestfulFactory(User, {
+  relations: ['articles'],
+});
+
+class UserService extends factory.crudService() {
+  constructor(@InjectRepository(User) repo) {
+    super(repo);
+  }
+}
+```
+
+推荐在 Entity 文件中定义 `RestfulFactory`，然后在 Service 中使用 `factory.crudService()` 生成服务类，而在 Controller 中使用 `factory.baseController()` 生成控制器。
+
+```ts
+// user.entity.ts
+@Entity()
+export class User extends IdBase() {
+  //
+}
+
+export const UserRestfulFactory = new RestfulFactory(User, {
+  relations: ['articles'], // 自动代入 UserService 和 UserController 的 relations
+});
+
+// user.service.ts
+@Injectable()
+export class UserService extends UserRestfulFactory.crudService() {
+  constructor(@InjectRepository(User) repo) {
+    super(repo);
+  }
+}
+
+// user.controller.ts
+@Controller('user')
+export class UserController extends UserRestfulFactory.baseController() {
+  constructor(userService: UserService) {
+    super(userService);
+  }
+}
+```
+
+这么做可以真正实现『一处定义，处处使用』，避免了 DTO 与查询参数的重复定义。
 
 ---
 
@@ -968,32 +1046,6 @@ async create(@DataBody() dto: CreateUserDto) {
 ```
 
 你无需手动加 `ValidationPipe`，也无需手动处理转换错误或格式校验，NICOT 帮你做好了这一切。
-
----
-
-## 🧩 实体关系示例
-
-```ts
-@Entity()
-class Article extends IdBase() {
-  @QueryEqual()
-  @IntColumn('bigint', { unsigned: true })
-  userId: number;
-
-  @ManyToOne(() => User, user => user.articles, { onDelete: 'CASCADE' })
-  user: User;
-}
-
-@Entity()
-class User extends IdBase() {
-  @OneToMany(() => Article, article => article.user)
-  articles: Article[];
-
-  async afterGet() {
-    this.articleCount = this.articles.length;
-  }
-}
-```
 
 ---
 
