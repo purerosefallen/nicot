@@ -11,6 +11,7 @@ import {
   QueryEqual,
   QueryGreater,
   QueryLess,
+  RelationComputed,
   StringColumn,
 } from '../../src/decorators';
 import { IdBase, StringIdBase } from '../../src/bases';

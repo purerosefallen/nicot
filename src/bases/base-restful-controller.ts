@@ -1,6 +1,7 @@
-import { CrudBase, CrudService, RelationDef } from '../crud-base';
+import { CrudBase, CrudService } from '../crud-base';
 import { Repository } from 'typeorm';
 import { ClassType } from 'nesties';
+import { RelationDef } from '../utility/relation-def';
 
 export const RestfulMethods = [
   'findOne',

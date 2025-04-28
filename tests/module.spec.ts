@@ -10,13 +10,6 @@ import _ from 'lodash';
 import { RestfulFactory } from '../src/restful';
 
 @Injectable()
-class UserService extends CrudService(User) {
-  constructor(@InjectDataSource() db: DataSource) {
-    super(db.getRepository(User));
-  }
-}
-
-@Injectable()
 class BookService extends CrudService(Book, {
   relations: ['user'],
 }) {
@@ -30,6 +23,13 @@ class FindAllUserDto extends dec.findAllDto {}
 class UpdateUserDto extends dec.updateDto {}
 class CreateUserDto extends dec.createDto {}
 class ImportUserDto extends dec.importDto {}
+
+@Injectable()
+class UserService extends dec.crudService() {
+  constructor(@InjectDataSource() db: DataSource) {
+    super(db.getRepository(User));
+  }
+}
 
 @Controller('user')
 class UserController {

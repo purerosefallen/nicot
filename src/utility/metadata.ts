@@ -1,6 +1,7 @@
 import { MetadataSetter, Reflector } from 'typed-reflector';
 import { QueryCond } from '../bases';
 import { AnyClass } from 'nesties';
+import { QueryFullTextColumnOptions } from './query-full-text-column-options.interface';
 
 interface SpecificFields {
   notColumn: boolean;
@@ -10,6 +11,7 @@ interface SpecificFields {
   notInResult: boolean;
   entityVersioningDate: boolean;
   relationComputed: () => { entityClass: AnyClass; isArray: boolean };
+  queryFullTextColumn: QueryFullTextColumnOptions;
 }
 
 interface MetadataMap extends SpecificFields {

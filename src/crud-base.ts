@@ -20,7 +20,6 @@ import _, { omit } from 'lodash';
 import {
   BlankReturnMessageDto,
   ClassType,
-  PageSettingsWise,
   PaginatedReturnMessageDto,
   ReturnMessageDto,
 } from 'nesties';
@@ -31,15 +30,11 @@ import {
   CursorPaginationReturnMessageDto,
 } from './dto/cursor-pagination';
 import { getPaginatedResult } from './utility/cursor-pagination-utils';
+import PQueue from 'p-queue';
+import { RelationDef } from './utility/relation-def';
+import { filterRelations } from './utility/filter-relations';
 
 export type EntityId<T extends { id: any }> = T['id'];
-export interface RelationDef {
-  name: string;
-  inner?: boolean;
-  extraCondition?: string;
-  extraConditionFields?: Record<string, any>;
-  noSelect?: boolean;
-}
 
 export const Relation = (
   name: string,
@@ -67,6 +62,11 @@ export interface CrudOptions<T extends ValidCrudEntity<T>> {
   keepEntityVersioningDates?: boolean;
 }
 
+const loadedParsers = new Set<string>();
+const loadFullTextQueue = new PQueue({
+  concurrency: 1,
+});
+
 export class CrudBase<T extends ValidCrudEntity<T>> {
   readonly entityName = this.entityClass.name;
   readonly entityReturnMessageDto = ReturnMessageDto(this.entityClass);
@@ -77,8 +77,11 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   );
   readonly entityCursorPaginatedReturnMessageDto =
     CursorPaginationReturnMessageDto(this.entityClass);
-  readonly entityRelations: (string | RelationDef)[];
-  readonly extraGetQuery: (qb: SelectQueryBuilder<T>) => void;
+  readonly entityRelations = filterRelations(
+    this.entityClass,
+    this.crudOptions.relations,
+  );
+  readonly extraGetQuery = this.crudOptions.extraGetQuery || ((qb) => {});
   readonly log = new ConsoleLogger(`${this.entityClass.name}Service`);
   readonly _typeormRelations = getTypeormRelations(this.entityClass);
 
@@ -86,11 +89,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     public entityClass: ClassType<T>,
     public repo: Repository<T>,
     public crudOptions: CrudOptions<T>,
-  ) {
-    this.entityRelations = crudOptions.relations || [];
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    this.extraGetQuery = crudOptions.extraGetQuery || ((qb) => {});
-  }
+  ) {}
 
   _cleanEntityNotInResultFields(ent: T): T {
     const visited = new Set();
@@ -599,6 +598,55 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   async exists(id: EntityId<T>): Promise<boolean> {
     const ent = await this.repo.findOne({ where: { id }, select: ['id'] });
     return !!ent;
+  }
+
+  async _loadFullTextIndex() {
+    const fields = reflector.getArray(
+      'queryFullTextColumnFields',
+      this.entityClass,
+    );
+
+    const metadata = this.repo.metadata;
+    const tableName = metadata.tableName; // 真正数据库里的表名
+
+    const sqls: string[] = [];
+
+    for (const field of fields) {
+      const options = reflector.get(
+        'queryFullTextColumn',
+        this.entityClass,
+        field,
+      );
+      if (!options) continue;
+
+      const configurationName = options.configuration;
+      const parser = options.parser;
+
+      if (parser && !loadedParsers.has(parser)) {
+        loadedParsers.add(parser);
+
+        sqls.push(
+          `CREATE EXTENSION IF NOT EXISTS ${parser};`,
+          `DROP TEXT SEARCH CONFIGURATION IF EXISTS ${configurationName};`,
+          `CREATE TEXT SEARCH CONFIGURATION ${configurationName} (PARSER = ${parser});`,
+          `ALTER TEXT SEARCH CONFIGURATION ${configurationName} ADD MAPPING FOR n, v, a, i, e, l WITH simple;`,
+        );
+      }
+
+      const indexName = `idx_fulltext_${this.entityName}_${field}`;
+
+      // 建立索引，索引名字用 this.entityName，表名用真实 tableName
+      sqls.push(
+        `CREATE INDEX IF NOT EXISTS "${indexName}" ON "${tableName}" USING GIN (to_tsvector('${configurationName}', "${field}"));`,
+      );
+    }
+    if (sqls.length) {
+      await this.repo.manager.query(sqls.join('\n'));
+    }
+  }
+
+  async onModuleInit() {
+    await loadFullTextQueue.add(() => this._loadFullTextIndex());
   }
 }
 

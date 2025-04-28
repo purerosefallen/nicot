@@ -3,7 +3,14 @@ import { getMetadataArgsStorage } from 'typeorm';
 import { getSpecificFields, reflector } from './metadata';
 import _ from 'lodash';
 
-export function getTypeormRelations<T>(cl: ClassType<T>) {
+export type TypeormRelation<T = any, KT = string> = {
+  isArray: boolean;
+  propertyClass: ClassType<T>;
+  propertyName: KT;
+  computed: boolean;
+};
+
+export function getTypeormRelations<T>(cl: ClassType<T>): TypeormRelation[] {
   const relations = getMetadataArgsStorage().relations.filter(
     (r) => r.target === cl,
   );
@@ -30,6 +37,7 @@ export function getTypeormRelations<T>(cl: ClassType<T>) {
       isArray,
       propertyClass,
       propertyName: relation.propertyName,
+      computed: false,
     };
   });
 
@@ -41,6 +49,7 @@ export function getTypeormRelations<T>(cl: ClassType<T>) {
         isArray: res.isArray,
         propertyClass: res.entityClass,
         propertyName: field,
+        computed: true,
       };
     },
   );
@@ -54,10 +63,6 @@ export function getTypeormRelationsMap<T>(cl: ClassType<T>) {
   return Object.fromEntries(
     getTypeormRelations(cl).map((r) => [r.propertyName, r]),
   ) as {
-    [key in keyof T]: {
-      isArray: boolean;
-      propertyClass: ClassType<T[key]>;
-      propertyName: key;
-    };
+    [key in keyof T]: TypeormRelation<T, key>;
   };
 }

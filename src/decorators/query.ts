@@ -7,6 +7,8 @@ import {
   applyQueryPropertySearch,
   applyQueryPropertyZeroNullable,
 } from '../utility';
+import { QueryFullTextColumnOptions } from '../utility/query-full-text-column-options.interface';
+import { MergePropertyDecorators } from 'nesties';
 
 export const QueryCondition = (cond: QueryCond) =>
   Metadata.set(
@@ -41,3 +43,31 @@ export const QueryGreaterEqual = createQueryOperator('>=');
 export const QueryLess = createQueryOperator('<');
 export const QueryLessEqual = createQueryOperator('<=');
 export const QueryNotEqual = createQueryOperator('!=');
+
+export const QueryFullText = (options: QueryFullTextColumnOptions = {}) => {
+  const configurationName = options.parser
+    ? `nicot_parser_${options.parser}`
+    : options.configuration || 'english';
+  return MergePropertyDecorators([
+    QueryCondition((obj, qb, entityName, key) => {
+      if (obj[key] == null) return;
+      const fieldName = key;
+      const typeormField = key;
+
+      qb.andWhere(
+        `to_tsvector('${configurationName}', "${entityName}"."${fieldName}") @@ to_tsquery('${configurationName}', :${typeormField})`,
+        {
+          [typeormField]: obj[key],
+        },
+      );
+    }),
+    Metadata.set(
+      'queryFullTextColumn',
+      {
+        ...options,
+        configuration: configurationName,
+      },
+      'queryFullTextColumnFields',
+    ),
+  ]);
+};

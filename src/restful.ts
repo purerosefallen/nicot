@@ -38,7 +38,7 @@ import { getNotInResultFields, getSpecificFields } from './utility/metadata';
 import { RenameClass } from './utility/rename-class';
 import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import { getTypeormRelations } from './utility/get-typeorm-relations';
-import { CrudBase, RelationDef } from './crud-base';
+import { CrudBase, CrudOptions, CrudService } from './crud-base';
 import { PageSettingsDto } from './bases';
 import {
   CursorPaginationDto,
@@ -50,6 +50,11 @@ import {
   RestfulPaginateType,
 } from './bases/base-restful-controller';
 import { Repository } from 'typeorm';
+import { RelationDef } from './utility/relation-def';
+import {
+  filterRelations,
+  extractRelationName,
+} from './utility/filter-relations';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -59,14 +64,6 @@ export interface RestfulFactoryOptions<T> {
   entityClassName?: string;
   relations?: (string | RelationDef)[];
 }
-
-const extractRelationName = (relation: string | RelationDef) => {
-  if (typeof relation === 'string') {
-    return relation;
-  } else {
-    return relation.name;
-  }
-};
 
 const getCurrentLevelRelations = (relations: string[]) =>
   relations.filter((r) => !r.includes('.'));
@@ -250,7 +247,12 @@ export class RestfulFactory<T extends { id: any }> {
     public readonly entityClass: ClassType<T>,
     private options: RestfulFactoryOptions<T> = {},
     private __resolveVisited = new Map<AnyClass, [AnyClass]>(),
-  ) {}
+  ) {
+    if (options.relations) {
+      // we have to filter once to ensure every relation is correct
+      filterRelations(entityClass, options.relations);
+    }
+  }
 
   private usePrefix(
     methodDec: (path?: string) => MethodDecorator,
@@ -568,5 +570,12 @@ export class RestfulFactory<T extends { id: any }> {
     }
 
     return RenameClass(cl, `${this.getEntityClassName()}Controller`);
+  }
+
+  crudService(options: CrudOptions<T> = {}) {
+    return CrudService(this.entityClass, {
+      relations: this.options.relations,
+      ...options,
+    });
   }
 }
