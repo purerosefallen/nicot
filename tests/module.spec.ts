@@ -86,7 +86,6 @@ describe('app', () => {
   });
 });
 
-/*
 describe('app', () => {
   let app: NestExpressApplication;
 
@@ -247,6 +246,243 @@ describe('app', () => {
     expect(backToFirstPageAgain.previousCursor).toBeUndefined();
     expect(backToFirstPageAgain.data[0].age).toBe(21);
     expect(backToFirstPageAgain.data[19].age).toBe(40);
+  });
+
+  it('should work with cursor pagination when age is nullable and can roll back', async () => {
+    const userService = app.get(UserService);
+    expect(userService).toBeDefined();
+
+    // 准备数据
+    const users = _.range(30).map((i) => {
+      const user = new User();
+      user.name = `NU${i}`;
+      if (i % 5 === 0) {
+        user.age = null; // 每5个是null
+      } else {
+        user.age = i;
+      }
+      user.gender = Gender.M;
+      return user;
+    });
+
+    await userService.repo.save(users);
+
+    // 第1页
+    const firstPage = await userService.findAllCursorPaginated(
+      { recordsPerPage: 10 },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC', 'NULLS LAST')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(firstPage.data).toHaveLength(10);
+    expect(firstPage.nextCursor).toBeDefined();
+    expect(firstPage.previousCursor).toBeUndefined();
+    expect(firstPage.data[0].age).toBe(1);
+    expect(firstPage.data[9].age).toBe(12);
+
+    console.log(`First page cursor (nullable test): ${firstPage.nextCursor}`);
+
+    // 第2页
+    const secondPage = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: firstPage.nextCursor,
+      },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC', 'NULLS LAST')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(secondPage.data).toHaveLength(10);
+    expect(secondPage.nextCursor).toBeDefined();
+    expect(secondPage.previousCursor).toBeDefined();
+    expect(secondPage.data[0].age).toBe(13);
+    expect(secondPage.data[9].age).toBe(24);
+
+    console.log(
+      `Second page cursor (nullable test): ${secondPage.nextCursor} / ${secondPage.previousCursor}`,
+    );
+
+    // 第3页
+    const thirdPage = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: secondPage.nextCursor,
+      },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC', 'NULLS LAST')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(thirdPage.data.length).toBe(10);
+    expect(thirdPage.previousCursor).toBeDefined();
+    expect(thirdPage.data.some((u) => u.age == null)).toBe(true);
+
+    console.log(
+      `Third page cursor (nullable test): ${thirdPage.nextCursor} / ${thirdPage.previousCursor}`,
+    );
+
+    // 🌟 回滚到第二页
+    const backToSecondPage = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: thirdPage.previousCursor,
+      },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC', 'NULLS LAST')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(backToSecondPage.data).toHaveLength(10);
+    // 确认滚回的数据跟secondPage一致
+    expect(backToSecondPage.data.map((d) => d.id)).toEqual(
+      secondPage.data.map((d) => d.id),
+    );
+    expect(backToSecondPage.nextCursor).toBe(secondPage.nextCursor);
+    expect(backToSecondPage.previousCursor).toBe(secondPage.previousCursor);
+
+    // 🌟 再回滚到第一页
+    const backToFirstPage = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: backToSecondPage.previousCursor,
+      },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC', 'NULLS LAST')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(backToFirstPage.data).toHaveLength(10);
+    expect(backToFirstPage.data.map((d) => d.id)).toEqual(
+      firstPage.data.map((d) => d.id),
+    );
+    expect(backToFirstPage.nextCursor).toBe(firstPage.nextCursor);
+    expect(backToFirstPage.previousCursor).toBeUndefined();
+  });
+
+  it('should work with cursor pagination when age is nullable with NULLS FIRST and can roll back', async () => {
+    const userService = app.get(UserService);
+    expect(userService).toBeDefined();
+
+    // 准备测试数据
+    const users = _.range(30).map((i) => {
+      const user = new User();
+      user.name = `NU${i}`;
+      if (i % 5 === 0) {
+        user.age = null; // 每5个是null
+      } else {
+        user.age = i;
+      }
+      user.gender = Gender.M;
+      return user;
+    });
+
+    await userService.repo.save(users);
+
+    // 第1页（第一页应该先出现null的记录）
+    const firstPage = await userService.findAllCursorPaginated(
+      { recordsPerPage: 10 },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC', 'NULLS FIRST')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(firstPage.data).toHaveLength(10);
+    expect(firstPage.nextCursor).toBeDefined();
+    expect(firstPage.previousCursor).toBeUndefined();
+    // 前几条应该包含age为null的记录
+    expect(firstPage.data.slice(0, 6).every((u) => u.age === null)).toBe(true);
+
+    console.log(
+      `First page cursor (NULLS FIRST test): ${firstPage.nextCursor}`,
+    );
+
+    // 第2页
+    const secondPage = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: firstPage.nextCursor,
+      },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC', 'NULLS FIRST')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(secondPage.data).toHaveLength(10);
+    expect(secondPage.nextCursor).toBeDefined();
+    expect(secondPage.previousCursor).toBeDefined();
+
+    // 第二页应该开始出现有age数值的记录了
+    expect(secondPage.data[0].age).toBeGreaterThan(0);
+
+    console.log(
+      `Second page cursor (NULLS FIRST test): ${secondPage.nextCursor} / ${secondPage.previousCursor}`,
+    );
+
+    // 第3页
+    const thirdPage = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: secondPage.nextCursor,
+      },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC', 'NULLS FIRST')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(thirdPage.data.length).toBeGreaterThan(0);
+    expect(thirdPage.previousCursor).toBeDefined();
+
+    console.log(
+      `Third page cursor (NULLS FIRST test): ${thirdPage.nextCursor} / ${thirdPage.previousCursor}`,
+    );
+
+    // 🌟 回滚到第二页
+    const backToSecondPage = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: thirdPage.previousCursor,
+      },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC', 'NULLS FIRST')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(backToSecondPage.data).toHaveLength(10);
+    expect(backToSecondPage.data.map((d) => d.id)).toEqual(
+      secondPage.data.map((d) => d.id),
+    );
+    expect(backToSecondPage.nextCursor).toBe(secondPage.nextCursor);
+    expect(backToSecondPage.previousCursor).toBe(secondPage.previousCursor);
+
+    // 🌟 再回滚到第一页
+    const backToFirstPage = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: backToSecondPage.previousCursor,
+      },
+      (qb) =>
+        qb
+          .orderBy(`${userService.entityAliasName}.age`, 'ASC', 'NULLS FIRST')
+          .addOrderBy(`${userService.entityAliasName}.id`, 'ASC'),
+    );
+
+    expect(backToFirstPage.data).toHaveLength(10);
+    expect(backToFirstPage.data.map((d) => d.id)).toEqual(
+      firstPage.data.map((d) => d.id),
+    );
+    expect(backToFirstPage.nextCursor).toBe(firstPage.nextCursor);
+    expect(backToFirstPage.previousCursor).toBeUndefined();
   });
 
   it('should work with cursor pagination and relations', async () => {
@@ -489,4 +725,3 @@ describe('app', () => {
     await testHttpServer('user3');
   });
 });
-*/

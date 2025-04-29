@@ -1,6 +1,8 @@
 import { Brackets, SelectQueryBuilder } from 'typeorm';
 import _ from 'lodash';
 import SJSON from 'superjson';
+import { queryColumnOptionsFromAlias } from './filter-relations';
+import { AnyClass } from 'nesties';
 
 export type TypeormOrderByObject = {
   order: 'ASC' | 'DESC';
@@ -9,14 +11,36 @@ export type TypeormOrderByObject = {
 export type TypeormOrderByKey = 'ASC' | 'DESC';
 export type TypeormOrderBy = ('ASC' | 'DESC') | TypeormOrderByObject;
 
-function getValueFromOrderBy(orderBy: TypeormOrderBy): TypeormOrderByKey {
+function getValueFromOrderBy(
+  orderBy: TypeormOrderBy,
+  reversed = false,
+): TypeormOrderByKey {
+  if (reversed) {
+    const value = getValueFromOrderBy(orderBy, false);
+    return value === 'ASC' ? 'DESC' : 'ASC';
+  }
   return typeof orderBy === 'string' ? orderBy : orderBy.order;
 }
 
-function getOperator(type: 'prev' | 'next', orderBy: TypeormOrderBy) {
+function getNullsFromOrderBy(
+  orderBy: TypeormOrderBy,
+  reversed = false,
+): 'NULLS FIRST' | 'NULLS LAST' {
+  if (reversed) {
+    const value = getNullsFromOrderBy(orderBy, false);
+    return value === 'NULLS FIRST' ? 'NULLS LAST' : 'NULLS FIRST';
+  }
+  const nulls = typeof orderBy === 'string' ? undefined : orderBy.nulls;
+  if (!nulls) {
+    const value = getValueFromOrderBy(orderBy);
+    return value === 'ASC' ? 'NULLS FIRST' : 'NULLS LAST';
+  }
+  return nulls;
+}
+
+function getOperator(orderBy: TypeormOrderBy) {
   const value = getValueFromOrderBy(orderBy);
-  const isBackwards = (type === 'prev') !== (value === 'DESC');
-  return isBackwards ? '<' : '>';
+  return value === 'ASC' ? '>' : '<';
 }
 
 function getReversedTypeormOrderBy(
@@ -70,10 +94,13 @@ export function extractValueFromOrderByKey(
     const value = obj[key];
     if (!value) return undefined;
     if (Array.isArray(value)) {
+      /*
       if (!value.length) {
         return undefined;
       }
       return value[value.length - 1];
+       */
+      return undefined;
     }
     return value;
   };
@@ -112,6 +139,7 @@ function decodeBase64Url(str: string) {
 
 export async function getPaginatedResult<T>(
   qb: SelectQueryBuilder<T>,
+  entityClass: AnyClass,
   entityAliasName: string,
   take: number,
   cursor?: string,
@@ -142,19 +170,72 @@ export async function getPaginatedResult<T>(
       qb.andWhere(
         new Brackets((sqb) => {
           const brackets = staircasedKeys.map(
-            (keys, i) =>
+            (keys) =>
               new Brackets((ssqb) => {
                 const expressions = keys.map((key, j) => {
                   const paramKey = cursorKey(key);
-                  const operator =
-                    j === keys.length - 1
-                      ? `${getOperator(
-                          data.type,
-                          qb.expressionMap.orderBys[key],
-                        )}`
-                      : '=';
-                  return `${key} ${operator} :${paramKey}`;
+                  const cursorValue = data.payload[key];
+                  const orderBy = qb.expressionMap.orderBys[key];
+                  const reversed = data.type === 'prev';
+                  const order = getValueFromOrderBy(orderBy, reversed); // 'ASC' or 'DESC'
+                  const nulls = getNullsFromOrderBy(orderBy, reversed); // 'NULLS FIRST' or 'NULLS LAST' or undefined
+
+                  const isLast = j === keys.length - 1;
+
+                  if (cursorValue == null) {
+                    if (isLast) {
+                      // 最后一层字段，且游标值是 null
+                      if (order === 'ASC') {
+                        if (nulls === 'NULLS FIRST') {
+                          // ASC + NULLS FIRST -> null在最前面
+                          // 所以翻页时要 > NULL，不需要筛掉
+                          return `${key} IS NOT NULL`;
+                        } else {
+                          // ASC + NULLS LAST（或未指定默认）
+                          // null排在最后，正常到null结束
+                          return `${key} IS NULL`;
+                        }
+                      } else {
+                        if (nulls === 'NULLS LAST') {
+                          // DESC + NULLS LAST
+                          return `${key} IS NOT NULL`;
+                        } else {
+                          // DESC + NULLS FIRST（或默认）
+                          return `${key} IS NULL`;
+                        }
+                      }
+                    } else {
+                      // 中间字段，如果是null，就比较 IS NULL
+                      return `${key} IS NULL`;
+                    }
+                  } else {
+                    if (isLast) {
+                      const expr = `${key} ${getOperator(order)} :${paramKey}`;
+                      if (
+                        queryColumnOptionsFromAlias(
+                          qb,
+                          entityClass,
+                          entityAliasName,
+                          key,
+                        )?.column?.isNullable
+                      ) {
+                        let mayBeNullAtEnd =
+                          (nulls === 'NULLS LAST' && order === 'ASC') ||
+                          (nulls === 'NULLS FIRST' && order === 'DESC');
+                        if (reversed) {
+                          mayBeNullAtEnd = !mayBeNullAtEnd;
+                        }
+                        if (mayBeNullAtEnd) {
+                          return `(${expr} OR ${key} IS NULL)`;
+                        }
+                      }
+                      return expr;
+                    } else {
+                      return `${key} = :${paramKey}`;
+                    }
+                  }
                 });
+
                 const [firstExpression, ...restExpressions] = expressions;
                 ssqb.where(firstExpression);
                 restExpressions.forEach((expression) =>
@@ -164,9 +245,15 @@ export async function getPaginatedResult<T>(
           );
           const [firstBrackets, ...restBrackets] = brackets;
           sqb.where(firstBrackets);
-          restBrackets.forEach((brackets) => sqb.orWhere(brackets));
+          restBrackets.forEach((bracket) => sqb.orWhere(bracket));
         }),
-      ).setParameters(_.mapKeys(data.payload, (_, key) => cursorKey(key)));
+      ).setParameters(
+        Object.fromEntries(
+          Object.entries(data.payload)
+            .filter(([k]) => qb.expressionMap.orderBys[k])
+            .map(([k, v]) => [cursorKey(k), v == null ? null : v]),
+        ),
+      );
     }
     if (data.type === 'prev') {
       reverseQueryOrderBy(qb);
@@ -188,14 +275,16 @@ export async function getPaginatedResult<T>(
   const generateCursor = (type: 'prev' | 'next', data: T[]) => {
     const targetObject = type === 'prev' ? data[0] : data[data.length - 1];
     const payload = Object.fromEntries(
-      orderBys.map(({ key }) => {
-        const value = extractValueFromOrderByKey(
-          targetObject,
-          key,
-          entityAliasName,
-        );
-        return [key, value];
-      }),
+      orderBys
+        .map(({ key }) => {
+          const value = extractValueFromOrderByKey(
+            targetObject,
+            key,
+            entityAliasName,
+          );
+          return [key, value];
+        })
+        .filter(([, value]) => value != null),
     );
     return encodeBase64Url(SJSON.stringify({ type, payload }));
   };

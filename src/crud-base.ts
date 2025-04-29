@@ -80,6 +80,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   readonly entityRelations = filterRelations(
     this.entityClass,
     this.crudOptions.relations,
+    (r) => !r.computed,
   );
   readonly extraGetQuery = this.crudOptions.extraGetQuery || ((qb) => {});
   readonly log = new ConsoleLogger(`${this.entityClass.name}Service`);
@@ -458,6 +459,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     try {
       const { data, paginatedResult } = await getPaginatedResult(
         query,
+        this.entityClass,
         this.entityAliasName,
         pageSettings.getRecordsPerPage(),
         ent.paginationCursor,

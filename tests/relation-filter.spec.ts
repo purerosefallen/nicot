@@ -23,15 +23,18 @@ class Book extends IdBase() {
 
 describe('Relation filter', () => {
   it('should filter relations correctly', () => {
-    expect(filterRelations(User, ['books', 'favoriteBook'])).toStrictEqual([
-      'books',
-    ]);
-    expect(filterRelations(User, ['books', 'books.user'])).toStrictEqual([
-      'books',
-      'books.user',
-    ]);
     expect(
-      filterRelations(Book, ['user', 'user.books', 'user.favoriteBook']),
+      filterRelations(User, ['books', 'favoriteBook'], (r) => !r.computed),
+    ).toStrictEqual(['books']);
+    expect(
+      filterRelations(User, ['books', 'books.user'], (r) => !r.computed),
+    ).toStrictEqual(['books', 'books.user']);
+    expect(
+      filterRelations(
+        Book,
+        ['user', 'user.books', 'user.favoriteBook'],
+        (r) => !r.computed,
+      ),
     ).toStrictEqual(['user', 'user.books']);
   });
 
