@@ -10,6 +10,7 @@ import {
 import { QueryFullTextColumnOptions } from '../utility/query-full-text-column-options.interface';
 import { MergePropertyDecorators } from 'nesties';
 import { unshiftOrderBy } from '../utility/unshift-order-by';
+import { addSubject } from '../utility/subject-registry';
 
 export const QueryCondition = (cond: QueryCond) =>
   Metadata.set(
@@ -65,7 +66,8 @@ export const QueryFullText = (options: QueryFullTextColumnOptions = {}) => {
 
       if (options.orderBySimilarity) {
         const rankVirtualField = `_fulltext_rank_${key}`;
-        qb.addSelect(
+        addSubject(
+          qb,
           `ts_rank(${tsVectorStatement}, ${tsQueryStatement})`,
           rankVirtualField,
         );

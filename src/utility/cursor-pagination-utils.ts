@@ -3,6 +3,7 @@ import _ from 'lodash';
 import SJSON from 'superjson';
 import { queryColumnOptionsFromAlias } from './filter-relations';
 import { AnyClass } from 'nesties';
+import { getSubject } from './subject-registry';
 
 export type TypeormOrderByObject = {
   order: 'ASC' | 'DESC';
@@ -165,7 +166,8 @@ export async function getPaginatedResult<T>(
         _.range(i + 1).map((j) => keys[j]),
       );
 
-      const cursorKey = (key: string) => `_cursor_${key.replace(/\./g, '__')}`;
+      const cursorKey = (key: string) =>
+        `_cursor_${key.replace(/\./g, '__').replace(/"/g, '')}`;
 
       qb.andWhere(
         new Brackets((sqb) => {
@@ -182,6 +184,10 @@ export async function getPaginatedResult<T>(
 
                   const isLast = j === keys.length - 1;
 
+                  const subject = key.includes('"')
+                    ? getSubject(qb, key.replace(/"/g, ''))
+                    : key;
+
                   if (cursorValue == null) {
                     if (isLast) {
                       // 最后一层字段，且游标值是 null
@@ -189,28 +195,30 @@ export async function getPaginatedResult<T>(
                         if (nulls === 'NULLS FIRST') {
                           // ASC + NULLS FIRST -> null在最前面
                           // 所以翻页时要 > NULL，不需要筛掉
-                          return `${key} IS NOT NULL`;
+                          return `${subject} IS NOT NULL`;
                         } else {
                           // ASC + NULLS LAST（或未指定默认）
                           // null排在最后，正常到null结束
-                          return `${key} IS NULL`;
+                          return `${subject} IS NULL`;
                         }
                       } else {
                         if (nulls === 'NULLS LAST') {
                           // DESC + NULLS LAST
-                          return `${key} IS NOT NULL`;
+                          return `${subject} IS NOT NULL`;
                         } else {
                           // DESC + NULLS FIRST（或默认）
-                          return `${key} IS NULL`;
+                          return `${subject} IS NULL`;
                         }
                       }
                     } else {
                       // 中间字段，如果是null，就比较 IS NULL
-                      return `${key} IS NULL`;
+                      return `${subject} IS NULL`;
                     }
                   } else {
                     if (isLast) {
-                      const expr = `${key} ${getOperator(order)} :${paramKey}`;
+                      const expr = `${subject} ${getOperator(
+                        order,
+                      )} :${paramKey}`;
                       if (
                         queryColumnOptionsFromAlias(
                           qb,
@@ -226,12 +234,12 @@ export async function getPaginatedResult<T>(
                           mayBeNullAtEnd = !mayBeNullAtEnd;
                         }
                         if (mayBeNullAtEnd) {
-                          return `(${expr} OR ${key} IS NULL)`;
+                          return `(${expr} OR ${subject} IS NULL)`;
                         }
                       }
                       return expr;
                     } else {
-                      return `${key} = :${paramKey}`;
+                      return `${subject} = :${paramKey}`;
                     }
                   }
                 });
@@ -260,7 +268,26 @@ export async function getPaginatedResult<T>(
     }
   }
 
-  const data = await qb.getMany();
+  const { raw, entities: data } = await qb.getRawAndEntities();
+
+  const rawMapById = new Map<any, any>();
+  const getRawFromEntity = (entity: any) => {
+    const isNumberId = typeof entity.id === 'number';
+    const id = entity.id;
+    if (rawMapById.has(id)) {
+      return rawMapById.get(id);
+    }
+    return raw.find((r) => {
+      let id = r[`${entityAliasName}_id`];
+      if (isNumberId) {
+        id = Number(id);
+        if (isNaN(id)) return false;
+      }
+      if (id == null) return false;
+      rawMapById[id] = r;
+      return id === entity.id;
+    });
+  };
 
   const enough = data.length > take;
   const hasNext = enough || type === 'prev';
@@ -276,11 +303,10 @@ export async function getPaginatedResult<T>(
     const targetObject = type === 'prev' ? data[0] : data[data.length - 1];
     const payload = Object.fromEntries(
       orderBys.map(({ key }) => {
-        const value = extractValueFromOrderByKey(
-          targetObject,
-          key,
-          entityAliasName,
-        );
+        const value =
+          !key.includes('.') || key.includes('"')
+            ? getRawFromEntity(targetObject)?.[key.replace(/"/g, '')]
+            : extractValueFromOrderByKey(targetObject, key, entityAliasName);
         return [key, value == null ? null : value];
       }),
     );

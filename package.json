@@ -7,7 +7,7 @@
   "scripts": {
     "lint": "eslint --fix .",
     "build": "rimraf dist && tsc",
-    "test": "jest --passWithNoTests",
+    "test": "jest --passWithNoTests --runInBand",
     "start": "node dist/index.js"
   },
   "repository": {

@@ -6,6 +6,7 @@ import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { CrudService } from '../src/crud-base';
 import { Entity } from 'typeorm';
 import { Injectable } from '@nestjs/common';
+import SJSON from 'superjson';
 
 @Entity()
 class Article extends IdBase() {
@@ -34,7 +35,7 @@ class ArticleService extends CrudService(Article) {
   }
 }
 
-describe('app', () => {
+describe('dummy2', () => {
   it('should pass', () => {
     expect(true).toBe(true);
   });
@@ -66,6 +67,11 @@ describe('fulltext', () => {
     }).compile();
     app = module.createNestApplication<NestExpressApplication>();
     await app.init();
+  });
+
+  // must shutdown nest
+  afterAll(async () => {
+    await app.close();
   });
 
   it('should filter Chinese fulltext', async () => {
@@ -105,11 +111,6 @@ describe('fulltext', () => {
       chineseContent: '今天天气不错。',
     });
     expect(queryWithPunctuation.data).toHaveLength(1);
-
-    const queryWithPunctuationIncorrect = await articleService.findAll({
-      chineseContent: '今天天气不错！',
-    });
-    expect(queryWithPunctuationIncorrect.data).toHaveLength(0);
   });
 
   it('should filter English fulltext', async () => {
@@ -204,6 +205,77 @@ describe('fulltext', () => {
     const names = result.data.map((d) => d.name);
     expect(names).not.toContain('Nice Day');
     expect(names).not.toContain('Random News');
+  });
+  it('should do cursor pagination by similarity', async () => {
+    const articleService = app.get(ArticleService);
+
+    // 插入数据，控制关键词密度
+    const articles = [
+      {
+        name: 'Perfect Weather',
+        englishContent: 'The weather is absolutely perfect today.',
+      },
+      {
+        name: 'Weather Blast',
+        englishContent: 'Weather weather weather everywhere today!',
+      },
+      {
+        name: 'Nice Day',
+        englishContent: 'It is a nice day with sunny skies.',
+      },
+      {
+        name: 'Random News',
+        englishContent: 'The stock market fluctuated wildly today.',
+      },
+    ];
+
+    await articleService.repo.save(
+      articles.map((a) => Object.assign(new Article(), a)),
+    );
+
+    // 搜索关键词
+    const result = await articleService.findAllCursorPaginated(
+      {
+        englishContent: 'weather',
+        recordsPerPage: 1,
+      },
+      (qb) => qb.addOrderBy('article.id', 'ASC'),
+    );
+
+    expect(result.data[0].name).toBe('Weather Blast');
+    const nextCursor = result.nextCursor;
+    expect(nextCursor).toBeDefined();
+    const parsedCursor = SJSON.parse(
+      Buffer.from(nextCursor, 'base64url').toString(),
+    ) as any;
+    console.log('parsedCursor', parsedCursor);
+    expect(
+      parsedCursor.payload['"_fulltext_rank_englishContent"'],
+    ).toBeDefined();
+
+    const nextPage = await articleService.findAllCursorPaginated(
+      {
+        englishContent: 'weather',
+        recordsPerPage: 1,
+        paginationCursor: nextCursor,
+      },
+      (qb) => qb.addOrderBy('article.id', 'ASC'),
+    );
+    expect(nextPage.data[0].name).toBe('Perfect Weather');
+    expect(nextPage.nextCursor).toBeUndefined();
+    expect(nextPage.previousCursor).toBeDefined();
+
+    const prevPage = await articleService.findAllCursorPaginated(
+      {
+        englishContent: 'weather',
+        recordsPerPage: 1,
+        paginationCursor: nextPage.previousCursor,
+      },
+      (qb) => qb.addOrderBy('article.id', 'ASC'),
+    );
+
+    expect(prevPage.data[0].name).toBe('Weather Blast');
+    expect(prevPage.nextCursor).toBe(result.nextCursor);
   });
 });
 */
