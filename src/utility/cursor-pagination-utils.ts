@@ -198,7 +198,7 @@ export async function getPaginatedResult<T>(
             if (cursorValue == null) {
               if (isLast) {
                 if (mayBeNullAtEnd()) {
-                  return '';
+                  return '__never__';
                 } else {
                   return `${subject} IS NOT NULL`;
                 }
@@ -227,7 +227,7 @@ export async function getPaginatedResult<T>(
             }
           }),
         )
-        .filter((s) => !s.some((ex) => !ex));
+        .filter((s) => !s.some((ex) => ex === '__never__'));
 
       if (expressionMatrix.length) {
         qb.andWhere(
