@@ -302,13 +302,15 @@ export async function getPaginatedResult<T>(
   const generateCursor = (type: 'prev' | 'next', data: T[]) => {
     const targetObject = type === 'prev' ? data[0] : data[data.length - 1];
     const payload = Object.fromEntries(
-      orderBys.map(({ key }) => {
-        const value =
-          !key.includes('.') || key.includes('"')
-            ? getRawFromEntity(targetObject)?.[key.replace(/"/g, '')]
-            : extractValueFromOrderByKey(targetObject, key, entityAliasName);
-        return [key, value == null ? null : value];
-      }),
+      orderBys
+        .map(({ key }) => {
+          const value =
+            !key.includes('.') || key.includes('"')
+              ? getRawFromEntity(targetObject)?.[key.replace(/"/g, '')]
+              : extractValueFromOrderByKey(targetObject, key, entityAliasName);
+          return [key, value];
+        })
+        .filter((s) => s[1] !== undefined),
     );
     return encodeBase64Url(SJSON.stringify({ type, payload }));
   };
