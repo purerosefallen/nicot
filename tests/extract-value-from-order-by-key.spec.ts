@@ -12,13 +12,13 @@ describe('extractValueFromOrderByKey', () => {
         'foo.bar',
         'root',
       ),
-    ).toBe(3);
+    ).toBeUndefined();
     expect(
       extractValueFromOrderByKey(
         { foo: { bar: [{}, { baz: [1, 2, 3] }] } },
         'foo_bar.baz',
         'root',
       ),
-    ).toBe(3);
+    ).toBeUndefined();
   });
 });

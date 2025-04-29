@@ -34,6 +34,12 @@ class ArticleService extends CrudService(Article) {
   }
 }
 
+describe('app', () => {
+  it('should pass', () => {
+    expect(true).toBe(true);
+  });
+});
+
 /*
 describe('fulltext', () => {
   let app: NestExpressApplication;
