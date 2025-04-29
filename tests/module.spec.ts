@@ -3,11 +3,12 @@ import { Controller, Injectable } from '@nestjs/common';
 import { CrudService } from '../src/crud-base';
 import { Book, Gender, User } from './utility/user';
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, SelectQueryBuilder } from 'typeorm';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import _ from 'lodash';
 import { RestfulFactory } from '../src/restful';
+import SJSON from 'superjson';
 
 @Injectable()
 class BookService extends CrudService(Book, {
@@ -489,6 +490,235 @@ describe('app', () => {
     );
     expect(backToFirstPage.nextCursor).toBe(firstPage.nextCursor);
     expect(backToFirstPage.previousCursor).toBeUndefined();
+  });
+
+  it('should paginate correctly with NULLS LAST and support full rollback', async () => {
+    const userService = app.get(UserService);
+    expect(userService).toBeDefined();
+
+    // 准备数据：前15条 age 非null，后15条 age=null
+    const users = _.range(30).map((i) => {
+      const user = new User();
+      user.name = `NL${i}`;
+      if (i < 15) {
+        user.age = i; // 非null
+      } else {
+        user.age = null; // 后半部分 null
+      }
+      user.gender = Gender.M;
+      return user;
+    });
+
+    await userService.repo.save(users);
+
+    const orderer = (qb: SelectQueryBuilder<User>) =>
+      qb
+        .orderBy(`${userService.entityAliasName}.age`, 'ASC', 'NULLS LAST')
+        .addOrderBy(`${userService.entityAliasName}.id`, 'ASC');
+
+    // 第1页
+    const page1 = await userService.findAllCursorPaginated(
+      { recordsPerPage: 10 },
+      orderer,
+    );
+
+    console.log(`Page 1: ${JSON.stringify(page1.data)}`);
+    console.log(
+      `Page 1 cursor: ${JSON.stringify(
+        SJSON.parse(Buffer.from(page1.nextCursor, 'base64url').toString()),
+      )}`,
+    );
+
+    expect(page1.data).toHaveLength(10);
+    expect(page1.data.every((u) => u.age !== null)).toBe(true);
+    expect(page1.nextCursor).toBeDefined();
+    expect(page1.previousCursor).toBeUndefined();
+
+    const lastOfPage1 = page1.data[page1.data.length - 1];
+
+    // 第2页
+    const page2 = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: page1.nextCursor,
+      },
+      orderer,
+    );
+
+    console.log(`Page 2: ${JSON.stringify(page2.data)}`);
+    console.log(
+      `Page 2 cursor: ${JSON.stringify(
+        SJSON.parse(Buffer.from(page2.nextCursor, 'base64url').toString()),
+      )}`,
+    );
+
+    expect(page2.data).toHaveLength(10);
+    expect(page2.previousCursor).toBeDefined();
+    expect(page2.nextCursor).toBeDefined();
+
+    const firstOfPage2 = page2.data[0];
+    expect(firstOfPage2.id).toBeGreaterThan(lastOfPage1.id);
+
+    // 第二页数据可能是非null或者开始进入null，做一个检查
+    expect(page2.data.slice(0, 5).every((u) => u.age !== null)).toBe(true);
+    expect(page2.data.slice(5).every((u) => u.age === null)).toBe(true);
+
+    const lastOfPage2 = page2.data[page2.data.length - 1];
+
+    // 第3页
+    const page3 = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: page2.nextCursor,
+      },
+      orderer,
+    );
+
+    console.log(`Page 3: ${JSON.stringify(page3.data)}`);
+    console.log(
+      `Page 3 previous cursor: ${JSON.stringify(
+        SJSON.parse(Buffer.from(page3.previousCursor, 'base64url').toString()),
+      )}`,
+    );
+
+    const firstOfPage3 = page3.data[0];
+    expect(firstOfPage3.id).toBeGreaterThan(lastOfPage2.id);
+
+    expect(page3.data.length).toBeGreaterThan(0);
+    expect(page3.previousCursor).toBeDefined();
+    expect(page3.nextCursor).toBeUndefined();
+
+    // 第三页应该基本全是 null
+    expect(page3.data.every((u) => u.age === null)).toBe(true);
+
+    // ⬅ 回滚到第2页
+    const page2Back = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: page3.previousCursor,
+      },
+      orderer,
+    );
+    expect(page2Back.data.map((u) => u.id)).toEqual(
+      page2.data.map((u) => u.id),
+    );
+    expect(page2Back.nextCursor).toBe(page2.nextCursor);
+    expect(page2Back.previousCursor).toBe(page2.previousCursor);
+
+    // ⬅ 回滚到第1页
+    const page1Back = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: page2Back.previousCursor,
+      },
+      orderer,
+    );
+    expect(page1Back.data.map((u) => u.id)).toEqual(
+      page1.data.map((u) => u.id),
+    );
+    expect(page1Back.nextCursor).toBe(page1.nextCursor);
+    expect(page1Back.previousCursor).toBeUndefined();
+
+    // 🔥 补充一个断言：第一页不应该包含null
+    expect(page1Back.data.every((u) => u.age !== null)).toBe(true);
+
+    // 🔥 补充一个断言：最后一页（page3）全是null
+    expect(page3.data.every((u) => u.age === null)).toBe(true);
+  });
+
+  it('should support full forward and backward cursor pagination when first page is all null (NULLS FIRST)', async () => {
+    const userService = app.get(UserService);
+    expect(userService).toBeDefined();
+
+    // 准备数据：前15条 age=null，后15条 age = 非 null
+    const users = _.range(30).map((i) => {
+      const user = new User();
+      user.name = `NN${i}`;
+      if (i < 15) {
+        user.age = null;
+      } else {
+        user.age = i;
+      }
+      user.gender = Gender.M;
+      return user;
+    });
+
+    await userService.repo.save(users);
+
+    const orderer = (qb: SelectQueryBuilder<User>) =>
+      qb
+        .orderBy(`${userService.entityAliasName}.age`, 'ASC', 'NULLS FIRST')
+        .addOrderBy(`${userService.entityAliasName}.id`, 'ASC');
+
+    // 第1页
+    const page1 = await userService.findAllCursorPaginated(
+      { recordsPerPage: 10 },
+      orderer,
+    );
+    console.log(`Page 1: ${JSON.stringify(page1.data)}`);
+    expect(page1.data).toHaveLength(10);
+    expect(page1.data.every((u) => u.age === null)).toBe(true);
+    expect(page1.nextCursor).toBeDefined();
+    expect(page1.previousCursor).toBeUndefined();
+
+    const lastOfPage1 = page1.data[page1.data.length - 1];
+
+    // 第2页
+    const page2 = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: page1.nextCursor,
+      },
+      orderer,
+    );
+    console.log(`Page 2: ${JSON.stringify(page2.data)}`);
+    expect(page2.data).toHaveLength(10);
+    expect(page2.previousCursor).toBeDefined();
+    expect(page2.nextCursor).toBeDefined();
+
+    const firstOfPage2 = page2.data[0];
+    expect(firstOfPage2.id).toBeGreaterThan(lastOfPage1.id); // ✅ 关键校验点
+
+    // 第3页
+    const page3 = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: page2.nextCursor,
+      },
+      orderer,
+    );
+    console.log(`Page 3: ${JSON.stringify(page3.data)}`);
+    expect(page3.data).toHaveLength(10);
+    expect(page3.previousCursor).toBeDefined();
+    expect(page3.nextCursor).toBeUndefined();
+
+    // ⬅ 回滚到第2页
+    const page2Back = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: page3.previousCursor,
+      },
+      orderer,
+    );
+    expect(page2Back.data.map((u) => u.id)).toEqual(
+      page2.data.map((u) => u.id),
+    );
+    expect(page2Back.nextCursor).toBe(page2.nextCursor);
+    expect(page2Back.previousCursor).toBe(page2.previousCursor);
+
+    // ⬅ 回滚到第1页
+    const page1Back = await userService.findAllCursorPaginated(
+      {
+        recordsPerPage: 10,
+        paginationCursor: page2Back.previousCursor,
+      },
+      orderer,
+    );
+    expect(page1Back.data.map((u) => u.id)).toEqual(
+      page1.data.map((u) => u.id),
+    );
+    expect(page1Back.nextCursor).toBe(page1.nextCursor);
+    expect(page1Back.previousCursor).toBeUndefined();
   });
 
   it('should work with cursor pagination and relations', async () => {

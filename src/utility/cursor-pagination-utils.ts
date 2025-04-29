@@ -93,7 +93,7 @@ export function extractValueFromOrderByKey(
 ) {
   const getField = (obj, key) => {
     const value = obj[key];
-    if (!value) return undefined;
+    if (value == null) return value;
     if (Array.isArray(value)) {
       /*
       if (!value.length) {
@@ -113,11 +113,11 @@ export function extractValueFromOrderByKey(
 
   if (aliasParts.length === 1) {
     const value = getField(obj, alias);
-    if (!value) return undefined;
+    if (value == null) return value;
     return getField(value, field);
   }
   const value = getField(obj, aliasParts[0]);
-  if (!value) return undefined;
+  if (!value == null) return value;
   return extractValueFromOrderByKey(
     value,
     `${aliasParts.slice(1).join('_')}.${field}`,
@@ -169,99 +169,91 @@ export async function getPaginatedResult<T>(
       const cursorKey = (key: string) =>
         `_cursor_${key.replace(/\./g, '__').replace(/"/g, '')}`;
 
-      qb.andWhere(
-        new Brackets((sqb) => {
-          const brackets = staircasedKeys.map(
-            (keys) =>
-              new Brackets((ssqb) => {
-                const expressions = keys.map((key, j) => {
-                  const paramKey = cursorKey(key);
-                  const cursorValue = data.payload[key];
-                  const orderBy = qb.expressionMap.orderBys[key];
-                  const reversed = data.type === 'prev';
-                  const order = getValueFromOrderBy(orderBy, reversed); // 'ASC' or 'DESC'
-                  const nulls = getNullsFromOrderBy(orderBy, reversed); // 'NULLS FIRST' or 'NULLS LAST' or undefined
+      const expressionMatrix = staircasedKeys
+        .map((keys) =>
+          keys.map((key, j) => {
+            const paramKey = cursorKey(key);
+            const cursorValue = data.payload[key];
+            const orderBy = qb.expressionMap.orderBys[key];
+            const reversed = data.type === 'prev';
+            const order = getValueFromOrderBy(orderBy, reversed); // 'ASC' or 'DESC'
+            const nulls = getNullsFromOrderBy(orderBy, reversed); // 'NULLS FIRST' or 'NULLS LAST' or undefined
 
-                  const isLast = j === keys.length - 1;
+            const isLast = j === keys.length - 1;
 
-                  const subject = key.includes('"')
-                    ? getSubject(qb, key.replace(/"/g, ''))
-                    : key;
+            const subject = key.includes('"')
+              ? getSubject(qb, key.replace(/"/g, ''))
+              : key;
 
-                  if (cursorValue == null) {
-                    if (isLast) {
-                      // 最后一层字段，且游标值是 null
-                      if (order === 'ASC') {
-                        if (nulls === 'NULLS FIRST') {
-                          // ASC + NULLS FIRST -> null在最前面
-                          // 所以翻页时要 > NULL，不需要筛掉
-                          return `${subject} IS NOT NULL`;
-                        } else {
-                          // ASC + NULLS LAST（或未指定默认）
-                          // null排在最后，正常到null结束
-                          return `${subject} IS NULL`;
-                        }
-                      } else {
-                        if (nulls === 'NULLS LAST') {
-                          // DESC + NULLS LAST
-                          return `${subject} IS NOT NULL`;
-                        } else {
-                          // DESC + NULLS FIRST（或默认）
-                          return `${subject} IS NULL`;
-                        }
-                      }
-                    } else {
-                      // 中间字段，如果是null，就比较 IS NULL
-                      return `${subject} IS NULL`;
-                    }
+            const mayBeNullAtEnd = () => {
+              const res =
+                (nulls === 'NULLS LAST' && order === 'ASC') ||
+                (nulls === 'NULLS FIRST' && order === 'DESC');
+              if (reversed) {
+                return !res;
+              }
+              return res;
+            };
+
+            if (cursorValue == null) {
+              if (isLast) {
+                if (mayBeNullAtEnd()) {
+                  return '';
+                } else {
+                  return `${subject} IS NOT NULL`;
+                }
+              } else {
+                // 中间字段，如果是null，就比较 IS NULL
+                return `${subject} IS NULL`;
+              }
+            } else {
+              if (isLast) {
+                const expr = `${subject} ${getOperator(order)} :${paramKey}`;
+                if (
+                  mayBeNullAtEnd() &&
+                  queryColumnOptionsFromAlias(
+                    qb,
+                    entityClass,
+                    entityAliasName,
+                    key,
+                  )?.column?.isNullable
+                ) {
+                  return `(${expr} OR ${subject} IS NULL)`;
+                }
+                return expr;
+              } else {
+                return `${subject} = :${paramKey}`;
+              }
+            }
+          }),
+        )
+        .filter((s) => !s.some((ex) => !ex));
+
+      if (expressionMatrix.length) {
+        qb.andWhere(
+          new Brackets((sqb) => {
+            const levelToBrackets = (level: string[]) =>
+              new Brackets((qb) => {
+                level.forEach((expr, i) => {
+                  if (i === 0) {
+                    qb.where(expr);
                   } else {
-                    if (isLast) {
-                      const expr = `${subject} ${getOperator(
-                        order,
-                      )} :${paramKey}`;
-                      if (
-                        queryColumnOptionsFromAlias(
-                          qb,
-                          entityClass,
-                          entityAliasName,
-                          key,
-                        )?.column?.isNullable
-                      ) {
-                        let mayBeNullAtEnd =
-                          (nulls === 'NULLS LAST' && order === 'ASC') ||
-                          (nulls === 'NULLS FIRST' && order === 'DESC');
-                        if (reversed) {
-                          mayBeNullAtEnd = !mayBeNullAtEnd;
-                        }
-                        if (mayBeNullAtEnd) {
-                          return `(${expr} OR ${subject} IS NULL)`;
-                        }
-                      }
-                      return expr;
-                    } else {
-                      return `${subject} = :${paramKey}`;
-                    }
+                    qb.andWhere(expr);
                   }
                 });
-
-                const [firstExpression, ...restExpressions] = expressions;
-                ssqb.where(firstExpression);
-                restExpressions.forEach((expression) =>
-                  ssqb.andWhere(expression),
-                );
-              }),
-          );
-          const [firstBrackets, ...restBrackets] = brackets;
-          sqb.where(firstBrackets);
-          restBrackets.forEach((bracket) => sqb.orWhere(bracket));
-        }),
-      ).setParameters(
-        Object.fromEntries(
-          Object.entries(data.payload)
-            .filter(([k]) => qb.expressionMap.orderBys[k])
-            .map(([k, v]) => [cursorKey(k), v == null ? null : v]),
-        ),
-      );
+              });
+            const [first, ...rest] = expressionMatrix;
+            sqb.where(levelToBrackets(first));
+            rest.forEach((level) => sqb.orWhere(levelToBrackets(level)));
+          }),
+        ).setParameters(
+          Object.fromEntries(
+            Object.entries(data.payload)
+              .filter(([k, v]) => qb.expressionMap.orderBys[k] && v != null)
+              .map(([k, v]) => [cursorKey(k), v]),
+          ),
+        );
+      }
     }
     if (data.type === 'prev') {
       reverseQueryOrderBy(qb);
