@@ -227,7 +227,7 @@ export async function getPaginatedResult<T>(
             }
           }),
         )
-        .filter((s) => !s.some((ex) => ex === '__never__'));
+        .filter((s) => !s.includes('__never__'));
 
       if (expressionMatrix.length) {
         qb.andWhere(
