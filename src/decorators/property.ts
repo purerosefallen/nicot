@@ -224,6 +224,7 @@ export const JsonColumn = <C extends ClassOrArray>(
 
 export const NotColumn = (
   options: OpenAPIOptions<any> = {},
+  specials: { keepInCreate?: boolean } = {},
 ): PropertyDecorator =>
   MergePropertyDecorators([
     Exclude(),
@@ -231,7 +232,7 @@ export const NotColumn = (
       required: false,
       ...options,
     }),
-    Metadata.set('notColumn', true, 'notColumnFields'),
+    Metadata.set('notColumn', specials, 'notColumnFields'),
   ]);
 
 export const QueryColumn = (

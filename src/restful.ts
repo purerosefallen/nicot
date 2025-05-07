@@ -219,7 +219,11 @@ export class RestfulFactory<T extends { id: any }> {
       ...getTypeormRelations(this.entityClass).map(
         (r) => r.propertyName as keyof T,
       ),
-      ...(getSpecificFields(this.entityClass, 'notColumn') as (keyof T)[]),
+      ...(getSpecificFields(
+        this.entityClass,
+        'notColumn',
+        (m) => m.keepInCreate,
+      ) as (keyof T)[]),
     ]),
     `${this.getEntityClassName()}CreateResultDto`,
   );
