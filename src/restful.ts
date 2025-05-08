@@ -55,6 +55,7 @@ import {
   filterRelations,
   extractRelationName,
 } from './utility/filter-relations';
+import { OmitTypeExclude } from './utility/omit-type-exclude';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -85,13 +86,13 @@ export class RestfulFactory<T extends { id: any }> {
       (r) => r.propertyName as keyof T,
     ),
   ]);
-  private readonly basicInputDto = OmitType(
+  private readonly basicInputDto = OmitTypeExclude(
     this.entityClass,
     this.fieldsToOmit,
   ) as ClassType<T>;
 
   readonly createDto = RenameClass(
-    OmitType(
+    OmitTypeExclude(
       this.basicInputDto,
       getSpecificFields(this.entityClass, 'notWritable') as (keyof T)[],
     ),
@@ -100,7 +101,7 @@ export class RestfulFactory<T extends { id: any }> {
   readonly importDto = ImportDataDto(this.createDto);
   readonly findAllDto = RenameClass(
     PartialType(
-      OmitType(
+      OmitTypeExclude(
         this.entityClass instanceof PageSettingsDto
           ? this.basicInputDto
           : (IntersectionType(
@@ -114,14 +115,14 @@ export class RestfulFactory<T extends { id: any }> {
   ) as ClassType<T>;
   readonly findAllCursorPaginatedDto = RenameClass(
     IntersectionType(
-      OmitType(this.findAllDto, ['pageCount' as keyof T]),
+      OmitTypeExclude(this.findAllDto, ['pageCount' as keyof T]),
       CursorPaginationDto,
     ),
     `Find${this.entityClass.name}CursorPaginatedDto`,
   ) as unknown as ClassType<T>;
   readonly updateDto = RenameClass(
     PartialType(
-      OmitType(
+      OmitTypeExclude(
         this.createDto,
         getSpecificFields(this.entityClass, 'notChangeable') as (keyof T)[],
       ),
