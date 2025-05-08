@@ -222,7 +222,7 @@ export class RestfulFactory<T extends { id: any }> {
       ...(getSpecificFields(
         this.entityClass,
         'notColumn',
-        (m) => m.keepInCreate,
+        (m) => !m.keepInCreate,
       ) as (keyof T)[]),
     ]),
     `${this.getEntityClassName()}CreateResultDto`,
