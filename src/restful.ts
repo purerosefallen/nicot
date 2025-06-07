@@ -191,6 +191,7 @@ export class RestfulFactory<T extends { id: any }> {
                 this.options.relations.map(extractRelationName),
                 relation.propertyName,
               ),
+            keepEntityVersioningDates: this.options.keepEntityVersioningDates,
           },
           this.__resolveVisited,
         );
