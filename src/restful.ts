@@ -516,9 +516,14 @@ export class RestfulFactory<T extends { id: any }> {
 
     for (const method of validMethods) {
       // 1. Override 继承方法，让它成为自己的（以便能装饰）
-      cl.prototype[method] = function (...args: any[]) {
+      const methodImpl = function namedMethodImpl(...args: any[]) {
         return BaseRestfulController.prototype[method].apply(this, args);
       };
+      Object.defineProperty(methodImpl, 'name', {
+        value: method,
+        configurable: true,
+      });
+      cl.prototype[method] = methodImpl;
 
       const paramDecorators = useDecorators[method].paramDecorators();
       const paramTypes = useDecorators[method].paramTypes;
