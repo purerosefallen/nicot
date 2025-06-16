@@ -848,6 +848,8 @@ class UserController extends factory.baseController({
 
 > 如果需要覆盖某个方法的实现，请在 `routes` 中设置 `enabled: false`，然后手动实现该方法。
 
+> 如果该 Controller 内任意路由写了 `enabled: true`，那么该 Controller 内只有 `enabled: true` 的路由会被生成。
+
 ---
 
 ## 一键生成 CrudService

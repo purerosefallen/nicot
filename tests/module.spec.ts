@@ -9,6 +9,7 @@ import request from 'supertest';
 import _ from 'lodash';
 import { RestfulFactory } from '../src/restful';
 import SJSON from 'superjson';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 @Injectable()
 class BookService extends CrudService(Book, {
@@ -111,6 +112,13 @@ describe('app', () => {
       controllers: [UserController, UserController2, SingleUserController],
     }).compile();
     app = module.createNestApplication<NestExpressApplication>();
+    const documentConfig = new DocumentBuilder()
+      .setTitle('test')
+      .setDescription('test')
+      .setVersion('1.0')
+      .build();
+    const document = SwaggerModule.createDocument(app, documentConfig);
+    SwaggerModule.setup('docs', app, document);
     await app.init();
   });
 
@@ -959,6 +967,41 @@ describe('app', () => {
 
   it('should work with controller (generated single file)', async () => {
     await testHttpServer('user3');
+  });
+
+  it('should generate openapi correctly', async () => {
+    const server = await app.getHttpServer();
+    await request(server)
+      .get('/docs-json')
+      .expect(200)
+      .expect((res) => {
+        // console.log(`OpenAPI JSON: ${JSON.stringify(res.body, null, 2)}`);
+        expect(res.body).toBeDefined();
+        const checkController = (cls: any, path: string) => {
+          const createMethod = `/${path}`;
+          const findAllMethod = `/${path}`;
+          const findOneMethod = `/${path}/{id}`;
+          const updateMethod = `/${path}/{id}`;
+          const deleteMethod = `/${path}/{id}`;
+          const importMethod = `/${path}/import`;
+          const checks = [
+            { name: 'create', method: 'post', path: createMethod },
+            { name: 'findAll', method: 'get', path: findAllMethod },
+            { name: 'findOne', method: 'get', path: findOneMethod },
+            { name: 'update', method: 'patch', path: updateMethod },
+            { name: 'delete', method: 'delete', path: deleteMethod },
+            { name: 'import', method: 'post', path: importMethod },
+          ];
+          checks.forEach((check) => {
+            const operation = res.body.paths[check.path]?.[check.method];
+            expect(operation).toBeDefined();
+            expect(operation.operationId).toBe(cls.name + '_' + check.name);
+          });
+        };
+        checkController(UserController, 'user');
+        checkController(UserController2, 'user2');
+        checkController(SingleUserController, 'user3');
+      });
   });
 });
 */

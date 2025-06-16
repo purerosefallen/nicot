@@ -457,9 +457,16 @@ export class RestfulFactory<T extends { id: any }> {
         ExplicitlyDisabledMethods
       >;
 
-    const validMethods = RestfulMethods.filter(
-      (m) => routeOptions?.routes?.[m]?.enabled !== false,
+    const anyTrueWritten = RestfulMethods.some(
+      (m) => routeOptions?.routes?.[m]?.enabled === true,
     );
+
+    const validMethods = RestfulMethods.filter((m) => {
+      const value = routeOptions?.routes?.[m]?.enabled;
+      if (value === false) return false;
+      if (value === true) return true;
+      return !anyTrueWritten || value === true;
+    });
 
     const useDecorators: Record<
       RestfulMethods,
