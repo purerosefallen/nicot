@@ -1,5 +1,3 @@
-import 'reflect-metadata';
-
 export * from 'nesties';
 export * from './src/crud-base';
 export * from './src/restful';
