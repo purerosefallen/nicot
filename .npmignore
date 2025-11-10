@@ -10,3 +10,4 @@ Dockerfile
 /coverage
 /tests
 /dist/tests
+/build.js

@@ -76,7 +76,7 @@ class UserController2 extends dec.baseController() {
 }
 
 @Controller('user3')
-class SingleUserController extends dec.baseController() {
+class SingleUserController extends dec.baseController({}) {
   constructor(@InjectDataSource() db: DataSource) {
     super(db.getRepository(User));
   }

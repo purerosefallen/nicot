@@ -1,4 +1,8 @@
-import { ImportEntryDto } from './dto';
+import {
+  CursorPaginationDto,
+  CursorPaginationReturnMessageDto,
+  ImportEntryDto,
+} from './dto';
 import {
   DeepPartial,
   DeleteResult,
@@ -25,10 +29,6 @@ import {
 } from 'nesties';
 import { getNotInResultFields, reflector } from './utility/metadata';
 import { getTypeormRelations } from './utility/get-typeorm-relations';
-import {
-  CursorPaginationDto,
-  CursorPaginationReturnMessageDto,
-} from './dto/cursor-pagination';
 import { getPaginatedResult } from './utility/cursor-pagination-utils';
 import PQueue from 'p-queue';
 import { RelationDef } from './utility/relation-def';
@@ -82,6 +82,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     this.crudOptions.relations,
     (r) => !r.computed,
   );
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   readonly extraGetQuery = this.crudOptions.extraGetQuery || ((qb) => {});
   readonly log = new ConsoleLogger(`${this.entityClass.name}Service`);
   readonly _typeormRelations = getTypeormRelations(this.entityClass);
@@ -141,7 +142,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     skipErrors = false,
   ) {
     const entsWithId = ents.filter((ent) => ent.id != null);
-    const result = await this.repo.manager.transaction(async (mdb) => {
+    return this.repo.manager.transaction(async (mdb) => {
       let skipped: { result: string; entry: T }[] = [];
       const repo = mdb.getRepository(this.entityClass);
 
@@ -248,7 +249,6 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         throw new BlankReturnMessageDto(500, 'Internal error').toException();
       }
     });
-    return result;
   }
 
   async create(_ent: T, beforeCreate?: (repo: Repository<T>) => Promise<void>) {

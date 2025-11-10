@@ -31,7 +31,7 @@ import {
   OmitType,
   PartialType,
 } from '@nestjs/swagger';
-import { CreatePipe, GetPipe, UpdatePipe } from './decorators/pipes';
+import { CreatePipe, GetPipe, UpdatePipe } from './decorators';
 import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import _, { upperFirst } from 'lodash';
 import { getNotInResultFields, getSpecificFields } from './utility/metadata';
@@ -40,10 +40,7 @@ import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import { getTypeormRelations } from './utility/get-typeorm-relations';
 import { CrudBase, CrudOptions, CrudService } from './crud-base';
 import { PageSettingsDto } from './bases';
-import {
-  CursorPaginationDto,
-  CursorPaginationReturnMessageDto,
-} from './dto/cursor-pagination';
+import { CursorPaginationDto, CursorPaginationReturnMessageDto } from './dto';
 import {
   BaseRestfulController,
   RestfulMethods,
@@ -433,14 +430,19 @@ export class RestfulFactory<T extends { id: any }> {
           }>
         >
       >;
+      // eslint-disable-next-line @typescript-eslint/ban-types
     }> = {},
   >(routeOptions: Options = {} as Options) {
     // 计算出哪些是 disabled 的方法
     type Routes = NonNullable<Options['routes']>;
-    type ExplicitlyDisabledMethods = {
-      [M in keyof Routes]: Routes[M] extends { enabled: false } ? M : never;
-    }[keyof Routes];
+    type ExplicitlyEnabledOrDisabledMethods<E> = {
+      [M in keyof Routes]: Routes[M] extends { enabled: E } ? M : never;
+    }[keyof Routes] &
+      RestfulMethods;
+    type ExplicitlyDisabledMethods = ExplicitlyEnabledOrDisabledMethods<false>;
+    type ExplicitlyEnabledMethods = ExplicitlyEnabledOrDisabledMethods<true>;
 
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const _this = this;
 
     const cl =
@@ -452,10 +454,11 @@ export class RestfulFactory<T extends { id: any }> {
             entityClass: _this.entityClass,
           });
         }
-      } as new (service: CrudBase<T> | Repository<T>) => Omit<
-        BaseRestfulController<T>,
-        ExplicitlyDisabledMethods
-      >;
+      } as new (service: CrudBase<T> | Repository<T>) => [
+        ExplicitlyEnabledMethods,
+      ] extends [never]
+        ? Omit<BaseRestfulController<T>, ExplicitlyDisabledMethods>
+        : Pick<BaseRestfulController<T>, ExplicitlyEnabledMethods>;
 
     const anyTrueWritten = RestfulMethods.some(
       (m) => routeOptions?.routes?.[m]?.enabled === true,
