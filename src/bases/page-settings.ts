@@ -29,10 +29,10 @@ export class PageSettingsDto
   @ApiProperty({
     description: 'The nth page, starting with 1.',
     required: false,
-    type: Number,
     minimum: 1,
   })
   @NotInResult()
+  @Reflect.metadata('design:type', Number)
   pageCount: number;
 
   @NotWritable()
@@ -41,10 +41,10 @@ export class PageSettingsDto
   @ApiProperty({
     description: 'Records per page.',
     required: false,
-    type: Number,
     minimum: 1,
   })
   @NotInResult()
+  @Reflect.metadata('design:type', Number)
   recordsPerPage: number;
 
   getActualPageSettings(): PageSettingsWise {
