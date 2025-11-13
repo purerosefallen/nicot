@@ -28,16 +28,19 @@ export class TimeBase
   @CreateDateColumn({ select: false })
   @NotColumn()
   @NotInResult({ entityVersioningDate: true })
+  @Reflect.metadata('design:type', Date)
   createTime: Date;
 
   @UpdateDateColumn({ select: false })
   @NotColumn()
   @NotInResult({ entityVersioningDate: true })
+  @Reflect.metadata('design:type', Date)
   updateTime: Date;
 
   @DeleteDateColumn({ select: false })
   @NotColumn()
   @NotInResult({ entityVersioningDate: true })
+  @Reflect.metadata('design:type', Date)
   deleteTime: Date;
 
   isValidInCreate(): string | undefined {
