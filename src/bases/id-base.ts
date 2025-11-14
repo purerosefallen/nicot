@@ -60,7 +60,7 @@ export function StringIdBase(idOptions: StringIdOptions) {
     }
   };
   const decs = [
-    StringColumn(idOptions.length || (idOptions.uuid ? 36 : 255), {
+    StringColumn(idOptions.length || (idOptions.uuid ? undefined : 255), {
       required: !idOptions.uuid,
       description: idOptions.description,
       columnExtras: { primary: true, nullable: false },
