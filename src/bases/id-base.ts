@@ -1,13 +1,15 @@
 import { TimeBase } from './time-base';
 import { Generated, SelectQueryBuilder } from 'typeorm';
-import { applyQueryProperty } from '../utility';
 import {
   IntColumn,
   NotChangeable,
   NotWritable,
+  PropertyOptions,
+  QueryEqual,
   StringColumn,
+  UuidColumn,
 } from '../decorators';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty } from 'class-validator';
 import { MergePropertyDecorators } from 'nesties';
 
 export interface IdOptions {
@@ -23,7 +25,6 @@ export function IdBase(idOptions: IdOptions = {}) {
       if (!idOptions.noOrderById) {
         qb.orderBy(`${entityName}.id`, 'DESC');
       }
-      applyQueryProperty(this, qb, entityName, 'id');
     }
   };
   const dec = MergePropertyDecorators([
@@ -35,6 +36,7 @@ export function IdBase(idOptions: IdOptions = {}) {
     }),
     Reflect.metadata('design:type', Number),
     Generated('increment'),
+    QueryEqual(),
   ]);
   dec(cl.prototype, 'id');
   return cl;
@@ -54,21 +56,30 @@ export function StringIdBase(idOptions: StringIdOptions) {
       entityName: string,
     ) {
       super.applyQuery(qb, entityName);
-      console.log('idbase order by');
-      qb.orderBy(`${entityName}.id`, 'ASC');
-      applyQueryProperty(this, qb, entityName, 'id');
+      if (!idOptions.noOrderById) {
+        qb.orderBy(`${entityName}.id`, 'ASC');
+      }
     }
   };
+  const columnOptions: PropertyOptions<string> = {
+    required: !idOptions.uuid,
+    description: idOptions.description,
+    columnExtras: { primary: true, nullable: false },
+  };
   const decs = [
-    StringColumn(idOptions.length || (idOptions.uuid ? undefined : 255), {
-      required: !idOptions.uuid,
-      description: idOptions.description,
-      columnExtras: { primary: true, nullable: false },
-    }),
     Reflect.metadata('design:type', String),
+    QueryEqual(),
     ...(idOptions.uuid
-      ? [Generated('uuid'), NotWritable()]
-      : [IsString(), IsNotEmpty(), NotChangeable()]),
+      ? [
+          UuidColumn({ ...columnOptions, generated: true }),
+          Generated('uuid'),
+          NotWritable(),
+        ]
+      : [
+          StringColumn(idOptions.length || 255, columnOptions),
+          IsNotEmpty(),
+          NotChangeable(),
+        ]),
   ];
   const dec = MergePropertyDecorators(decs);
   dec(cl.prototype, 'id');

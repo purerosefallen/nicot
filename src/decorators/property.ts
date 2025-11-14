@@ -2,7 +2,7 @@ import { ColumnCommonOptions } from 'typeorm/decorator/options/ColumnCommonOptio
 import { ApiProperty, ApiPropertyOptions } from '@nestjs/swagger';
 import { ColumnWithLengthOptions } from 'typeorm/decorator/options/ColumnWithLengthOptions';
 import { AnyClass, MergePropertyDecorators } from 'nesties';
-import { Column, Index } from 'typeorm';
+import { Column, Generated, Index } from 'typeorm';
 import {
   IsDate,
   IsEnum,
@@ -10,6 +10,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Min,
   ValidateNested,
@@ -82,6 +83,29 @@ export const StringColumn = (
     MaxLength(length),
     validatorDecorator(options),
     swaggerDecorator(options, { type: String, maxLength: length }),
+  ]);
+};
+
+export const UuidColumn = (
+  options: PropertyOptions<string> & { generated?: boolean } = {},
+): PropertyDecorator => {
+  return MergePropertyDecorators([
+    Column('uuid', {
+      ...columnDecoratorOptions(options),
+      ...(options.generated
+        ? {
+            nullable: false,
+            generated: 'uuid',
+          }
+        : {}),
+    }),
+    IsUUID(),
+    validatorDecorator(options),
+    swaggerDecorator(options, {
+      type: String,
+      format: 'uuid',
+      example: '550e8400-e29b-41d4-a716-446655440000',
+    }),
   ]);
 };
 
