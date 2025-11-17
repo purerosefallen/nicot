@@ -152,6 +152,7 @@ export class RestfulFactory<T extends { id: any }> {
     const resultDto = OmitType(this.entityClass, [...outputFieldsToOmit]);
     for (const relation of relations) {
       if (outputFieldsToOmit.has(relation.propertyName as keyof T)) continue;
+      if (nonTransformableTypes.has(relation.propertyClass)) continue;
       const replace = (useClass: [AnyClass]) => {
         const oldApiProperty =
           Reflect.getMetadata(
@@ -159,18 +160,10 @@ export class RestfulFactory<T extends { id: any }> {
             this.entityClass.prototype,
             relation.propertyName,
           ) || {};
-        const typeFactory = () =>
-          relation.isArray ? [useClass[0]] : useClass[0];
-        console.log(
-          'test restful',
-          this.entityClass.name,
-          relation.propertyName,
-          typeFactory(),
-        );
         ApiProperty({
           ...oldApiProperty,
           required: false,
-          type: typeFactory,
+          type: () => (relation.isArray ? [useClass[0]] : useClass[0]),
         })(resultDto.prototype, relation.propertyName);
       };
       const existing = this.__resolveVisited.get(relation.propertyClass);

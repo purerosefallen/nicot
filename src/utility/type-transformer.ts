@@ -6,10 +6,13 @@ const toValue = (cl: new () => any, value: any) => {
   if (cl === Date) {
     return new Date(value);
   }
-  if (nonTransformableTypes.has(cl)) {
+  if (nonTransformableTypes.has(cl) || value instanceof cl) {
     return value;
   }
-  return Object.assign(new cl(), value);
+  if (typeof value === 'object') {
+    return Object.assign(new cl(), value);
+  }
+  return value;
 };
 
 export class TypeTransformer implements ValueTransformer {
