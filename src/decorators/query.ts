@@ -25,6 +25,7 @@ export const QuerySearch = () => QueryCondition(applyQueryPropertySearch);
 export const QueryEqualZeroNullable = () =>
   QueryCondition(applyQueryPropertyZeroNullable);
 
+/* @deprecated Use QueryEqual instead */
 export const QueryMatchBoolean = () => QueryCondition(applyQueryMatchBoolean);
 
 export const QueryOperator = (operator: string, field?: string) =>

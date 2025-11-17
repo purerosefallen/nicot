@@ -11,6 +11,7 @@ interface SpecificFields {
   notInResult: { entityVersioningDate?: boolean };
   relationComputed: () => { entityClass: AnyClass; isArray: boolean };
   queryFullTextColumn: QueryFullTextColumnOptions;
+  boolColumn: boolean;
 }
 
 interface MetadataMap extends SpecificFields {

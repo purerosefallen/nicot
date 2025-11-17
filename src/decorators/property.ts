@@ -226,6 +226,7 @@ export const BoolColumn = (
     Column('boolean', columnDecoratorOptions(options)),
     validatorDecorator(options),
     swaggerDecorator(options, { type: Boolean }),
+    Metadata.set('boolColumn', true, 'boolColumnFields'),
   ]);
 
 export const JsonColumn = <C extends ClassOrArray>(

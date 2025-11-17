@@ -17,6 +17,7 @@ import {
   PaginatedReturnMessageDto,
   ReturnMessageDto,
   ClassType,
+  getApiProperty,
 } from 'nesties';
 import {
   ApiBadRequestResponse,
@@ -35,8 +36,7 @@ import { CreatePipe, GetPipe, UpdatePipe } from './decorators';
 import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import _, { upperFirst } from 'lodash';
 import { getNotInResultFields, getSpecificFields } from './utility/metadata';
-import { RenameClass } from './utility/rename-class';
-import { DECORATORS } from '@nestjs/swagger/dist/constants';
+import { RenameClass } from 'nesties';
 import { getTypeormRelations } from './utility/get-typeorm-relations';
 import { CrudBase, CrudOptions, CrudService } from './crud-base';
 import { PageSettingsDto } from './bases';
@@ -54,6 +54,7 @@ import {
 } from './utility/filter-relations';
 import { OmitTypeExclude } from './utility/omit-type-exclude';
 import { nonTransformableTypes } from './utility/non-transformable-types';
+import { PatchColumnsInGet } from './utility/patch-column-in-get';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -97,20 +98,31 @@ export class RestfulFactory<T extends { id: any }> {
     `Create${this.entityClass.name}Dto`,
   ) as ClassType<T>;
   readonly importDto = ImportDataDto(this.createDto);
+
+  private readonly fieldsInGetToOmit = _.uniq([
+    ...this.fieldsToOmit,
+    ...(getSpecificFields(this.entityClass, 'notQueryable') as (keyof T)[]),
+  ]);
+
   readonly findAllDto = RenameClass(
     PartialType(
-      OmitTypeExclude(
-        this.entityClass instanceof PageSettingsDto
-          ? this.basicInputDto
-          : (IntersectionType(
-              this.basicInputDto,
-              PageSettingsDto,
-            ) as unknown as ClassType<T>),
-        getSpecificFields(this.entityClass, 'notQueryable') as (keyof T)[],
+      PatchColumnsInGet(
+        OmitTypeExclude(
+          this.entityClass instanceof PageSettingsDto
+            ? this.entityClass
+            : (IntersectionType(
+                this.entityClass,
+                PageSettingsDto,
+              ) as unknown as ClassType<T>),
+          this.fieldsInGetToOmit,
+        ),
+        this.entityClass,
+        this.fieldsInGetToOmit as string[],
       ),
     ),
     `Find${this.entityClass.name}Dto`,
   ) as ClassType<T>;
+
   readonly findAllCursorPaginatedDto = RenameClass(
     IntersectionType(
       OmitTypeExclude(this.findAllDto, ['pageCount' as keyof T]),
@@ -154,12 +166,10 @@ export class RestfulFactory<T extends { id: any }> {
       if (outputFieldsToOmit.has(relation.propertyName as keyof T)) continue;
       if (nonTransformableTypes.has(relation.propertyClass)) continue;
       const replace = (useClass: [AnyClass]) => {
-        const oldApiProperty =
-          Reflect.getMetadata(
-            DECORATORS.API_MODEL_PROPERTIES,
-            this.entityClass.prototype,
-            relation.propertyName,
-          ) || {};
+        const oldApiProperty = getApiProperty(
+          this.entityClass,
+          relation.propertyName,
+        );
         ApiProperty({
           ...oldApiProperty,
           required: false,

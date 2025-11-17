@@ -192,7 +192,7 @@ RestfulFactory 处理 Entity 类的时候，会以这些装饰器为依据，裁
 nickname: string;
 
 @BoolColumn()
-@QueryMatchBoolean()
+@QueryEqual()
 isActive: boolean;
 ```
 
@@ -209,7 +209,6 @@ NICOT 提供了一套查询装饰器，用于在 Entity 字段上声明支持的
 | `@QueryEqual()`               | 精确匹配：`WHERE field = :value`              |
 | `@QueryLike()`                | 前缀模糊匹配：`WHERE field LIKE :value%`        |
 | `@QuerySearch()`              | 宽泛模糊搜索：`WHERE field LIKE %:value%`       |
-| `@QueryMatchBoolean()`        | `true/false/1/0` 转换为布尔类型查询               |
 | `@QueryEqualZeroNullable()`   | `0 → IS NULL`，否则 `= :value`（适合 nullable） |
 | `@QueryGreater(field)`        | 大于查询：`WHERE field > :value`              |
 | `@QueryLess(field)`           | 小于查询：`WHERE field < :value`              |
@@ -287,7 +286,7 @@ views: number;
 title: string;
 
 @BoolColumn()
-@QueryMatchBoolean()
+@QueryEqual()
 isPublished: boolean;
 
 @NotWritable()
@@ -474,7 +473,7 @@ NICOT 提供了 `RestfulFactory(Entity)` 工厂函数，自动为实体生成标
 name: string;
 
 @BoolColumn()
-@QueryMatchBoolean()
+@QueryEqual()
 isActive: boolean;
 ```
 
