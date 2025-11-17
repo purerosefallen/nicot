@@ -161,13 +161,16 @@ export class RestfulFactory<T extends { id: any }> {
           ) || {};
         const typeFactory = () =>
           relation.isArray ? [useClass[0]] : useClass[0];
+        console.log(
+          'test restful',
+          this.entityClass.name,
+          relation.propertyName,
+          typeFactory(),
+        );
         ApiProperty({
           ...oldApiProperty,
           required: false,
-          type:
-            useClass[0] && nonTransformableTypes.has(useClass[0])
-              ? typeFactory()
-              : typeFactory,
+          type: typeFactory,
         })(resultDto.prototype, relation.propertyName);
       };
       const existing = this.__resolveVisited.get(relation.propertyClass);
