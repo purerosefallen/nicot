@@ -70,11 +70,7 @@ export function StringIdBase(idOptions: StringIdOptions) {
     Reflect.metadata('design:type', String),
     QueryEqual(),
     ...(idOptions.uuid
-      ? [
-          UuidColumn({ ...columnOptions, generated: true }),
-          Generated('uuid'),
-          NotWritable(),
-        ]
+      ? [UuidColumn({ ...columnOptions, generated: true }), NotWritable()]
       : [
           StringColumn(idOptions.length || 255, columnOptions),
           IsNotEmpty(),
