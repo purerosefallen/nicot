@@ -1,14 +1,13 @@
 import { ValueTransformer } from 'typeorm';
 import { ClassOrArray } from 'nesties';
-
-const nonTransformableTypes = new Set<new () => any>([String, Number, Boolean]);
+import { nonTransformableTypes } from './non-transformable-types';
 
 const toValue = (cl: new () => any, value: any) => {
-  if (nonTransformableTypes.has(cl)) {
-    return value;
-  }
   if (cl === Date) {
     return new Date(value);
+  }
+  if (nonTransformableTypes.has(cl)) {
+    return value;
   }
   return Object.assign(new cl(), value);
 };

@@ -53,6 +53,7 @@ import {
   extractRelationName,
 } from './utility/filter-relations';
 import { OmitTypeExclude } from './utility/omit-type-exclude';
+import { nonTransformableTypes } from './utility/non-transformable-types';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -158,10 +159,15 @@ export class RestfulFactory<T extends { id: any }> {
             this.entityClass.prototype,
             relation.propertyName,
           ) || {};
+        const typeFactory = () =>
+          relation.isArray ? [useClass[0]] : useClass[0];
         ApiProperty({
           ...oldApiProperty,
           required: false,
-          type: () => (relation.isArray ? [useClass[0]] : useClass[0]),
+          type:
+            useClass[0] && nonTransformableTypes.has(useClass[0])
+              ? typeFactory()
+              : typeFactory,
         })(resultDto.prototype, relation.propertyName);
       };
       const existing = this.__resolveVisited.get(relation.propertyClass);
