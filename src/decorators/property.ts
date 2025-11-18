@@ -2,7 +2,7 @@ import { ColumnCommonOptions } from 'typeorm/decorator/options/ColumnCommonOptio
 import { ApiProperty, ApiPropertyOptions } from '@nestjs/swagger';
 import { ColumnWithLengthOptions } from 'typeorm/decorator/options/ColumnWithLengthOptions';
 import { AnyClass, MergePropertyDecorators } from 'nesties';
-import { Column, Generated, Index } from 'typeorm';
+import { Column, Index } from 'typeorm';
 import {
   IsDate,
   IsEnum,
@@ -11,11 +11,14 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
 import {
+  SimpleColumnType,
+  WithLengthColumnType,
   WithPrecisionColumnType,
   WithWidthColumnType,
 } from 'typeorm/driver/types/ColumnTypes';
@@ -25,8 +28,12 @@ import { Exclude, Transform, Type } from 'class-transformer';
 import { BigintTransformer } from '../utility/bigint';
 import { Metadata } from '../utility/metadata';
 import { ClassOrArray, getClassFromClassOrArray, ParseType } from 'nesties';
-import { TypeTransformer } from '../utility/type-transformer';
+import {
+  TypeTransformer,
+  TypeTransformerString,
+} from '../utility/type-transformer';
 import { NotInResult, NotQueryable, NotWritable } from './access';
+import { parseBool } from '../utility/parse-bool';
 
 export interface OpenAPIOptions<T> {
   description?: string;
@@ -75,14 +82,32 @@ function columnDecoratorOptions<T>(
 
 export const StringColumn = (
   length: number,
-  options: PropertyOptions<string, ColumnWithLengthOptions> = {},
+  options: PropertyOptions<string, ColumnWithLengthOptions> & {
+    columnType?: WithLengthColumnType;
+  } = {},
 ): PropertyDecorator => {
   return MergePropertyDecorators([
-    Column('varchar', { length, ...columnDecoratorOptions(options) }),
+    Column(options.columnType || 'varchar', {
+      length,
+      ...columnDecoratorOptions(options),
+    }),
     IsString(),
     MaxLength(length),
     validatorDecorator(options),
     swaggerDecorator(options, { type: String, maxLength: length }),
+  ]);
+};
+
+export const TextColumn = (
+  options: PropertyOptions<string> & {
+    columnType?: SimpleColumnType;
+  } = {},
+): PropertyDecorator => {
+  return MergePropertyDecorators([
+    Column(options.columnType || 'text', columnDecoratorOptions(options)),
+    IsString(),
+    validatorDecorator(options),
+    swaggerDecorator(options, { type: String }),
   ]);
 };
 
@@ -109,13 +134,38 @@ export const UuidColumn = (
   ]);
 };
 
+const intMaxList = {
+  tinyint: 0x7f,
+  smallint: 0x7fff,
+  mediumint: 0x7fffff,
+  int: 0x7fffffff,
+  bigint: Number.MAX_SAFE_INTEGER,
+};
+
 export const IntColumn = (
   type: WithWidthColumnType,
   options: PropertyOptions<number, ColumnWithWidthOptions> & {
     unsigned?: boolean;
+    range?: {
+      min?: number;
+      max?: number;
+    };
   } = {},
 ): PropertyDecorator => {
-  const decs = [
+  let max = intMaxList[type] || Number.MAX_SAFE_INTEGER;
+  if (max !== Number.MAX_SAFE_INTEGER && options.unsigned) {
+    max = max * 2 + 1;
+  }
+  let min = options.unsigned ? 0 : -max - 1;
+  if (options.range) {
+    if (typeof options.range.min === 'number' && options.range.min > min) {
+      min = options.range.min;
+    }
+    if (typeof options.range.max === 'number' && options.range.max < max) {
+      max = options.range.max;
+    }
+  }
+  return MergePropertyDecorators([
     Column(type, {
       default: options.default,
       unsigned: options.unsigned,
@@ -123,48 +173,72 @@ export const IntColumn = (
       ...columnDecoratorOptions(options),
     }),
     IsInt(),
+    ...(min > Number.MIN_SAFE_INTEGER ? [Min(min)] : []),
+    ...(max < Number.MAX_SAFE_INTEGER ? [Max(max)] : []),
     validatorDecorator(options),
     swaggerDecorator(options, {
       type: Number,
-      minimum: options.unsigned ? 0 : undefined,
+      minimum: min > Number.MIN_SAFE_INTEGER ? min : undefined,
+      maximum: max < Number.MAX_SAFE_INTEGER ? max : undefined,
     }),
-  ];
-  if (options.unsigned) {
-    decs.push(Min(0));
-  }
-  return MergePropertyDecorators(decs);
+  ]);
 };
 
 export const FloatColumn = (
   type: WithPrecisionColumnType,
   options: PropertyOptions<number, ColumnNumericOptions> & {
     unsigned?: boolean;
+    range?: {
+      min?: number;
+      max?: number;
+    };
   } = {},
 ): PropertyDecorator => {
-  const decs = [
+  let min = options.unsigned ? 0 : Number.MIN_SAFE_INTEGER;
+  let max = Number.MAX_SAFE_INTEGER;
+  if (
+    options.columnExtras?.precision != null &&
+    options.columnExtras?.scale != null
+  ) {
+    const precision = options.columnExtras.precision;
+    const scale = options.columnExtras.scale;
+
+    const intDigits = precision - scale;
+
+    if (intDigits > 0) {
+      const maxIntPart = Math.pow(10, intDigits) - 1;
+      const maxDecimalPart =
+        scale > 0 ? (Math.pow(10, scale) - 1) / Math.pow(10, scale) : 0;
+      max = maxIntPart + maxDecimalPart;
+      min = options.unsigned ? 0 : -max;
+    }
+  }
+  return MergePropertyDecorators([
     Column(type, {
       default: options.default,
       unsigned: options.unsigned,
       ...columnDecoratorOptions(options),
     }),
     IsNumber(),
+    ...(min > Number.MIN_SAFE_INTEGER ? [Min(min)] : []),
+    ...(max < Number.MAX_SAFE_INTEGER ? [Max(max)] : []),
     validatorDecorator(options),
     swaggerDecorator(options, {
       type: Number,
-      minimum: options.unsigned ? 0 : undefined,
+      minimum: min > Number.MIN_SAFE_INTEGER ? min : undefined,
+      maximum: max < Number.MAX_SAFE_INTEGER ? max : undefined,
     }),
-  ];
-  if (options.unsigned) {
-    decs.push(Min(0));
-  }
-  return MergePropertyDecorators(decs);
+  ]);
 };
 
 export const DateColumn = (
-  options: PropertyOptions<Date> = {},
+  options: PropertyOptions<Date> & { columnType?: SimpleColumnType } = {},
 ): PropertyDecorator => {
   return MergePropertyDecorators([
-    Column('timestamp', columnDecoratorOptions(options)),
+    Column(
+      options.columnType || ('timestamp' as SimpleColumnType),
+      columnDecoratorOptions(options),
+    ),
     IsDate(),
     Transform(
       (v) => {
@@ -217,11 +291,7 @@ export const BoolColumn = (
   MergePropertyDecorators([
     Index(),
     Transform((v) => {
-      const trueValues = ['true', '1', 'yes', 'on', true, 1];
-      const falseValues = ['false', '0', 'no', 'off', false, 0];
-      if (trueValues.indexOf(v.value) !== -1) return true;
-      if (falseValues.indexOf(v.value) !== -1) return false;
-      return undefined;
+      return parseBool(v.value);
     }),
     Column('boolean', columnDecoratorOptions(options)),
     validatorDecorator(options),
@@ -229,23 +299,37 @@ export const BoolColumn = (
     Metadata.set('boolColumn', true, 'boolColumnFields'),
   ]);
 
-export const JsonColumn = <C extends ClassOrArray>(
-  definition: C,
-  options: PropertyOptions<ParseType<C>> = {},
-): PropertyDecorator => {
-  const cl = getClassFromClassOrArray(definition);
-  return MergePropertyDecorators([
-    NotQueryable(),
-    Type(() => cl),
-    ValidateNested(),
-    Column('jsonb', {
-      ...columnDecoratorOptions(options),
-      transformer: new TypeTransformer(definition),
-    }),
-    validatorDecorator(options),
-    swaggerDecorator(options, { type: definition }),
-  ]);
-};
+const createJsonColumnDef =
+  (
+    columnType: SimpleColumnType = 'jsonb',
+    typeTransformerClass = TypeTransformer,
+  ) =>
+  <C extends ClassOrArray>(
+    definition: C,
+    options: PropertyOptions<ParseType<C>> & {
+      columnType?: SimpleColumnType;
+    } = {},
+  ): PropertyDecorator => {
+    const cl = getClassFromClassOrArray(definition);
+    return MergePropertyDecorators([
+      NotQueryable(),
+      Type(() => cl),
+      ValidateNested(),
+      Column(options.columnType || columnType, {
+        ...columnDecoratorOptions(options),
+        transformer: new typeTransformerClass(definition),
+      }),
+      validatorDecorator(options),
+      swaggerDecorator(options, { type: definition }),
+    ]);
+  };
+
+export const JsonColumn = createJsonColumnDef();
+export const SimpleJsonColumn = createJsonColumnDef('json');
+export const StringJsonColumn = createJsonColumnDef(
+  'text',
+  TypeTransformerString,
+);
 
 export const NotColumn = (
   options: OpenAPIOptions<any> = {},

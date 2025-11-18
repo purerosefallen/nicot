@@ -2,6 +2,7 @@ import { QueryCond } from '../bases';
 import { Metadata } from '../utility/metadata';
 import {
   applyQueryMatchBoolean,
+  applyQueryMatchBooleanMySQL,
   applyQueryProperty,
   applyQueryPropertyLike,
   applyQueryPropertySearch,
@@ -25,8 +26,9 @@ export const QuerySearch = () => QueryCondition(applyQueryPropertySearch);
 export const QueryEqualZeroNullable = () =>
   QueryCondition(applyQueryPropertyZeroNullable);
 
-/* @deprecated Use QueryEqual instead */
 export const QueryMatchBoolean = () => QueryCondition(applyQueryMatchBoolean);
+export const QueryMatchBooleanMySQL = () =>
+  QueryCondition(applyQueryMatchBooleanMySQL);
 
 export const QueryOperator = (operator: string, field?: string) =>
   QueryCondition((obj, qb, entityName, key) => {

@@ -55,6 +55,7 @@ import {
 import { OmitTypeExclude } from './utility/omit-type-exclude';
 import { nonTransformableTypes } from './utility/non-transformable-types';
 import { PatchColumnsInGet } from './utility/patch-column-in-get';
+import { ParseBoolObjectPipe } from './utility/parse-bool';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -357,8 +358,18 @@ export class RestfulFactory<T extends { id: any }> {
     ]);
   }
 
+  private getBoolColumns() {
+    const boolColumns = getSpecificFields(this.entityClass, 'boolColumn');
+    return _.difference(boolColumns, this.fieldsInGetToOmit as string[]);
+  }
+
   findAllParam() {
-    return Query(GetPipe());
+    const boolColumns = this.getBoolColumns();
+    if (boolColumns.length) {
+      return Query(new ParseBoolObjectPipe(boolColumns), GetPipe());
+    } else {
+      return Query(GetPipe());
+    }
   }
 
   update(extras: Partial<OperationObject> = {}): MethodDecorator {

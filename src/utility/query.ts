@@ -1,4 +1,5 @@
 import { Brackets, SelectQueryBuilder } from 'typeorm';
+import { parseBool } from './parse-bool';
 
 export function createQueryCondition(
   cond: <T>(
@@ -67,12 +68,24 @@ export const applyQueryPropertyZeroNullable = createQueryCondition(
 
 export const applyQueryMatchBoolean = createQueryCondition(
   (obj, qb, entityName, field) => {
-    const value = obj[field] as any;
-    if (value === true || value === 'true' || value === 1 || value === '1') {
+    const value = parseBool(obj[field]);
+    if (value === true) {
       qb.andWhere(`${entityName}.${field} = TRUE`);
     }
-    if (value === false || value === 'false' || value === 0 || value === '0') {
+    if (value === false) {
       qb.andWhere(`${entityName}.${field} = FALSE`);
+    }
+  },
+);
+
+export const applyQueryMatchBooleanMySQL = createQueryCondition(
+  (obj, qb, entityName, field) => {
+    const value = parseBool(obj[field]);
+    if (value === true) {
+      qb.andWhere(`${entityName}.${field} = 1`);
+    }
+    if (value === false) {
+      qb.andWhere(`${entityName}.${field} = 0`);
     }
   },
 );

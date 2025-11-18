@@ -31,3 +31,19 @@ export class TypeTransformer implements ValueTransformer {
     return entValue;
   }
 }
+
+export class TypeTransformerString extends TypeTransformer {
+  from(dbValue) {
+    if (dbValue == null) {
+      return dbValue;
+    }
+    return super.from(JSON.parse(dbValue));
+  }
+
+  to(entValue): any {
+    if (entValue == null) {
+      return entValue;
+    }
+    return JSON.stringify(super.to(entValue));
+  }
+}
