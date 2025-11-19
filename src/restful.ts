@@ -489,11 +489,13 @@ export class RestfulFactory<T extends { id: any }> {
             entityClass: _this.entityClass,
           });
         }
-      } as new (service: CrudBase<T> | Repository<T>) => [
+      } as new (service: CrudBase<T> | Repository<T>) => ([
         ExplicitlyEnabledMethods,
       ] extends [never]
         ? Omit<BaseRestfulController<T>, ExplicitlyDisabledMethods>
-        : Pick<BaseRestfulController<T>, ExplicitlyEnabledMethods>;
+        : Pick<BaseRestfulController<T>, ExplicitlyEnabledMethods>) & {
+        service: CrudBase<T>;
+      };
 
     const anyTrueWritten = RestfulMethods.some(
       (m) => routeOptions?.routes?.[m]?.enabled === true,
