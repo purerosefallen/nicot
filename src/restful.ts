@@ -28,6 +28,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiProperty,
+  ApiPropertyOptions,
   IntersectionType,
   OmitType,
   PartialType,
@@ -213,6 +214,17 @@ export class RestfulFactory<T extends { id: any }> {
           ]);
         }
       }
+    }
+    const notRequiredButHasDefaultFields = getSpecificFields(
+      this.entityClass,
+      'notRequiredButHasDefault',
+    ).filter((f) => !outputFieldsToOmit.has(f as keyof T));
+    for (const field of notRequiredButHasDefaultFields) {
+      const oldApiProperty = getApiProperty(resultDto, field);
+      ApiProperty({
+        ...oldApiProperty,
+        required: true,
+      } as ApiPropertyOptions)(resultDto.prototype, field);
     }
     const res = RenameClass(
       resultDto,

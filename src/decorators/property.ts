@@ -46,7 +46,10 @@ function swaggerDecorator(
   options: OpenAPIOptions<any>,
   injected: ApiPropertyOptions = {},
 ) {
-  return ApiProperty({
+  // we should patch the required flag in EntityResultDto
+  const notRequiredButHasDefault =
+    options.required == null && options.default != null;
+  const apiPropertyDec = ApiProperty({
     default: options.default,
     required: !!(options.required && options.default == null),
     example: options.default,
@@ -54,6 +57,18 @@ function swaggerDecorator(
     ...injected,
     ...(options.propertyExtras || {}),
   } as ApiPropertyOptions);
+  if (notRequiredButHasDefault) {
+    return MergePropertyDecorators([
+      apiPropertyDec,
+      Metadata.set(
+        'notRequiredButHasDefault',
+        true,
+        'notRequiredButHasDefaultFields',
+      ),
+    ]);
+  } else {
+    return apiPropertyDec;
+  }
 }
 
 function validatorDecorator(options: OpenAPIOptions<any>) {

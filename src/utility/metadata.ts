@@ -12,6 +12,7 @@ interface SpecificFields {
   relationComputed: () => { entityClass: AnyClass; isArray: boolean };
   queryFullTextColumn: QueryFullTextColumnOptions;
   boolColumn: boolean;
+  notRequiredButHasDefault: boolean;
 }
 
 interface MetadataMap extends SpecificFields {
