@@ -42,6 +42,13 @@ export interface OpenAPIOptions<T> {
   required?: boolean;
 }
 
+const NotRequiredButHasDefaultDec = () =>
+  Metadata.set(
+    'notRequiredButHasDefault',
+    true,
+    'notRequiredButHasDefaultFields',
+  );
+
 function swaggerDecorator(
   options: OpenAPIOptions<any>,
   injected: ApiPropertyOptions = {},
@@ -60,11 +67,7 @@ function swaggerDecorator(
   if (notRequiredButHasDefault) {
     return MergePropertyDecorators([
       apiPropertyDec,
-      Metadata.set(
-        'notRequiredButHasDefault',
-        true,
-        'notRequiredButHasDefaultFields',
-      ),
+      NotRequiredButHasDefaultDec(),
     ]);
   } else {
     return apiPropertyDec;
@@ -146,6 +149,7 @@ export const UuidColumn = (
       format: 'uuid',
       example: '550e8400-e29b-41d4-a716-446655440000',
     }),
+    ...(options.generated ? [NotRequiredButHasDefaultDec()] : []),
   ]);
 };
 
