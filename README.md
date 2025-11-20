@@ -135,14 +135,18 @@ NICOT 提供了一系列 `***Column()` 装饰器，统一处理字段的：
 
 ### 字段类型装饰器（`***Column()`）
 
-| 装饰器名             | 数据类型       | 自动添加的验证与文档            |
-|----------------------|----------------|---------------------------------|
-| `@StringColumn(len)` | string         | `@IsString()` + `@Length()`     |
-| `@IntColumn(type)`   | int/bigint/... | `@IsInt()` + Swagger number 类型 |
-| `@FloatColumn(type)` | float/decimal  | `@IsNumber()`                   |
-| `@BoolColumn()`      | boolean        | `@IsBoolean()`                  |
-| `@DateColumn()`      | Date           | `@IsDate()`                     |
-| `@JsonColumn(T)`     | 任意对象/数组  | `@IsObject()` / `@ValidateNested()` 等 |
+| 装饰器名                   | 数据类型            | 自动添加的验证与文档                            |
+|------------------------|-----------------|---------------------------------------|
+| `@StringColumn(len)`   | varchar         | `@IsString()` + `@Length()`           |
+| `@TextColumn()`        | text            | `@IsString()`                         |
+| `@UuidColumn()`        | uuid            | `@IsUUID()`                           |
+| `@IntColumn(type)`     | int/bigint/...  | `@IsInt()` + Swagger number 类型        |
+| `@FloatColumn(type)`   | float/decimal   | `@IsNumber()`                         |
+| `@BoolColumn()`        | boolean         | `@IsBoolean()`                        |
+| `@DateColumn()`        | Date            | `@IsDate()`                           |
+| `@JsonColumn(T)`       | 任意对象/数组 (jsonb) | `@IsObject()` / `@ValidateNested()` 等 |
+| `@SimpleJsonColumn(T)` | 任意对象/数组 (json)  | `@IsObject()` / `@ValidateNested()` 等 |
+| `@StringJsonColumn(T)` | 任意对象/数组 (text)  | `@IsObject()` / `@ValidateNested()` 等 |
 
 所有字段装饰器都支持第二个参数 `options`：
 
