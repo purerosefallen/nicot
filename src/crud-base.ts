@@ -107,7 +107,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         delete o[field];
       }
       visited.add(o);
-      for (const relation of this._typeormRelations) {
+      for (const relation of getTypeormRelations(cl)) {
         const propertyName = relation.propertyName as string;
         if (o[propertyName]) {
           if (Array.isArray(o[propertyName])) {
