@@ -18,11 +18,10 @@ import {
 } from 'class-validator';
 import {
   SimpleColumnType,
+  UnsignedColumnType,
   WithLengthColumnType,
   WithPrecisionColumnType,
-  WithWidthColumnType,
 } from 'typeorm/driver/types/ColumnTypes';
-import { ColumnWithWidthOptions } from 'typeorm/decorator/options/ColumnWithWidthOptions';
 import { ColumnNumericOptions } from 'typeorm/decorator/options/ColumnNumericOptions';
 import { Exclude, Transform, Type } from 'class-transformer';
 import { BigintTransformer } from '../utility/bigint';
@@ -34,6 +33,7 @@ import {
 } from '../utility/type-transformer';
 import { NotInResult, NotQueryable, NotWritable } from './access';
 import { parseBool } from '../utility/parse-bool';
+import { ColumnUnsignedOptions } from 'typeorm/decorator/options/ColumnUnsignedOptions';
 
 export interface OpenAPIOptions<T> {
   description?: string;
@@ -162,8 +162,8 @@ const intMaxList = {
 };
 
 export const IntColumn = (
-  type: WithWidthColumnType,
-  options: PropertyOptions<number, ColumnWithWidthOptions> & {
+  type: UnsignedColumnType,
+  options: PropertyOptions<number, ColumnUnsignedOptions> & {
     unsigned?: boolean;
     range?: {
       min?: number;
