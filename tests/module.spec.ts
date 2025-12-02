@@ -925,6 +925,19 @@ describe('app', () => {
       });
 
     await request(server)
+      .get(`/${path}?ageIn=20,21`)
+      .expect((res) => {
+        expect(res.body.success).toBe(true);
+        expect(res.body.data).toHaveLength(1);
+      });
+    await request(server)
+      .get(`/${path}?ageIn=22,23`)
+      .expect((res) => {
+        expect(res.body.success).toBe(true);
+        expect(res.body.data).toHaveLength(0);
+      });
+
+    await request(server)
       .patch(`/${path}/1`)
       .send({ name: 'Nana', gender: 'M' })
       .expect(200);
@@ -940,6 +953,7 @@ describe('app', () => {
           gender: 'F', // gender is not updated because it's NotChangeable
         });
       });
+
     await request(server).delete(`/${path}/1`).expect(200);
     await request(server).get(`/${path}/1`).expect(404);
     await request(server)

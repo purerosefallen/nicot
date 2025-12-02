@@ -57,9 +57,9 @@ import {
 import { OmitTypeExclude, PickTypeExpose } from './utility/omit-type-exclude';
 import { nonTransformableTypes } from './utility/non-transformable-types';
 import { PatchColumnsInGet } from './utility/patch-column-in-get';
-import { ParseBoolObjectPipe } from './utility/parse-bool';
 import { OmitPipe, OptionalDataPipe, PickPipe } from './decorators';
 import { Memorize } from './utility/memorize';
+import { MutatorPipe } from './utility/mutate-pipe';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -147,6 +147,10 @@ export class RestfulFactory<T extends { id: any }> {
     return _.uniq([
       ...this.fieldsToOmit,
       ...(getSpecificFields(this.entityClass, 'notQueryable') as (keyof T)[]),
+      ...(_.difference(
+        getSpecificFields(this.entityClass, 'requireGetMutator'),
+        getSpecificFields(this.entityClass, 'getMutator'),
+      ) as (keyof T)[]),
     ]);
   }
 
@@ -435,19 +439,19 @@ export class RestfulFactory<T extends { id: any }> {
     ]);
   }
 
-  private getBoolColumns() {
-    const boolColumns = getSpecificFields(this.entityClass, 'boolColumn');
-    return _.difference(boolColumns, this.fieldsInGetToOmit as string[]);
+  private getMutatorColumns() {
+    const mutatorColumns = getSpecificFields(this.entityClass, 'getMutator');
+    return _.difference(mutatorColumns, this.fieldsInGetToOmit as string[]);
   }
 
   findAllParam() {
-    const boolColumns = this.getBoolColumns();
+    const mutatorColumns = this.getMutatorColumns();
     const restPipes = [OptionalDataPipe(), OmitPipe(this.fieldsInGetToOmit)];
     if (this.options.skipNonQueryableFields) {
       restPipes.push(PickPipe(this.queryableFields));
     }
-    if (boolColumns.length) {
-      return Query(new ParseBoolObjectPipe(boolColumns), ...restPipes);
+    if (mutatorColumns.length) {
+      return Query(new MutatorPipe(this.entityClass), ...restPipes);
     } else {
       return Query(...restPipes);
     }
@@ -702,6 +706,7 @@ export class RestfulFactory<T extends { id: any }> {
   crudService(options: CrudOptions<T> = {}) {
     return CrudService(this.entityClass, {
       relations: this.options.relations,
+      outputFieldsToOmit: this.options.outputFieldsToOmit,
       ...options,
     });
   }

@@ -60,6 +60,7 @@ export interface CrudOptions<T extends ValidCrudEntity<T>> {
   hardDelete?: boolean;
   createOrUpdate?: boolean;
   keepEntityVersioningDates?: boolean;
+  outputFieldsToOmit?: (keyof T)[];
 }
 
 const loadedParsers = new Set<string>();
@@ -103,6 +104,9 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         cl,
         this.crudOptions.keepEntityVersioningDates,
       );
+      if (cl === this.entityClass && this.crudOptions.outputFieldsToOmit) {
+        fields.push(...(this.crudOptions.outputFieldsToOmit as string[]));
+      }
       for (const field of fields) {
         delete o[field];
       }

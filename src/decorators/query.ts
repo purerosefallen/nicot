@@ -130,13 +130,17 @@ export const QueryLessEqual = createQueryOperator('<=');
 export const QueryNotEqual = createQueryOperator('!=');
 export const QueryJsonbHas = createQueryOperator('?');
 
-export const createQuerySeparatedArrayify = (
+export const createQueryArrayify = (
   newWrapper: QueryWrapper,
   singleFallbackWrapper?: QueryWrapper,
 ) =>
   createQueryWrap((entityExpr, varExpr, info) => {
-    if (typeof info.value !== 'string') return;
-    const items = info.value.split(',');
+    const value = info.value;
+    const items = Array.isArray(value)
+      ? value
+      : typeof value === 'string'
+      ? value.split(',')
+      : [value];
     if (items.length === 1 && singleFallbackWrapper) {
       const singleRes = singleFallbackWrapper(entityExpr, varExpr, info);
       if (singleRes) {
@@ -152,7 +156,7 @@ export const createQueryOperatorArrayify = (
   operator: string,
   singleFallback?: string | QueryWrapper,
 ) =>
-  createQuerySeparatedArrayify(
+  createQueryArrayify(
     (entityExpr, varExpr) => `${entityExpr} ${operator} ${varExpr}`,
     typeof singleFallback === 'string'
       ? singleFallback.length
@@ -161,8 +165,8 @@ export const createQueryOperatorArrayify = (
       : singleFallback,
   );
 
-export const QueryInSeparated = createQueryOperatorArrayify('IN', '=');
-export const QueryNotInSeparated = createQueryOperatorArrayify('NOT IN', '!=');
+export const QueryIn = createQueryOperatorArrayify('IN', '=');
+export const QueryNotIn = createQueryOperatorArrayify('NOT IN', '!=');
 
 export const QueryFullText = (options: QueryFullTextColumnOptions = {}) => {
   const configurationName = options.parser

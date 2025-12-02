@@ -31,9 +31,10 @@ import {
   TypeTransformer,
   TypeTransformerString,
 } from '../utility/type-transformer';
-import { NotInResult, NotQueryable, NotWritable } from './access';
+import { NotInResult, NotWritable } from './access';
 import { parseBool } from '../utility/parse-bool';
 import { ColumnUnsignedOptions } from 'typeorm/decorator/options/ColumnUnsignedOptions';
+import { GetMutatorBool, RequireGetMutator } from './get-mutator';
 
 export interface OpenAPIOptions<T> {
   description?: string;
@@ -315,7 +316,7 @@ export const BoolColumn = (
     Column('boolean', columnDecoratorOptions(options)),
     validatorDecorator(options),
     swaggerDecorator(options, { type: Boolean }),
-    Metadata.set('boolColumn', true, 'boolColumnFields'),
+    GetMutatorBool(),
   ]);
 
 const createJsonColumnDef =
@@ -331,7 +332,7 @@ const createJsonColumnDef =
   ): PropertyDecorator => {
     const cl = getClassFromClassOrArray(definition);
     return MergePropertyDecorators([
-      NotQueryable(),
+      RequireGetMutator(),
       Type(() => cl),
       ValidateNested(),
       Column(options.columnType || columnType, {

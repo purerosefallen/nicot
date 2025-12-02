@@ -2,6 +2,7 @@ import { Entity, Index, ManyToOne, OneToMany } from 'typeorm';
 import {
   DateColumn,
   EnumColumn,
+  GetMutatorIntSeparated,
   IntColumn,
   NotChangeable,
   NotColumn,
@@ -10,7 +11,7 @@ import {
   QueryColumn,
   QueryEqual,
   QueryGreater,
-  QueryInSeparated,
+  QueryIn,
   QueryLess,
   QueryOr,
   RelationComputed,
@@ -18,6 +19,7 @@ import {
 } from '../../src/decorators';
 import { IdBase, StringIdBase } from '../../src/bases';
 import { Exclude } from 'class-transformer';
+import { IsArray, IsInt } from 'class-validator';
 
 export enum Gender {
   F = 'F',
@@ -44,7 +46,7 @@ export class User extends IdBase() {
   bio: string;
 
   @QueryColumn()
-  @QueryInSeparated('name')
+  @QueryIn('name')
   nameIn: string;
 
   @IntColumn('int', { unsigned: true })
@@ -72,8 +74,17 @@ export class User extends IdBase() {
   @OneToMany(() => Book, (book) => book.user)
   books: Book[];
 
-  @QueryOr(QueryInSeparated('name'), QueryEqual('bio'))
+  @QueryOr(QueryIn('name'), QueryEqual('bio'))
   search: string;
+
+  @GetMutatorIntSeparated()
+  @QueryColumn()
+  @QueryIn('age')
+  @IsArray()
+  @IsInt({
+    each: true,
+  })
+  ageIn: number[];
 }
 
 @Entity()

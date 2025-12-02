@@ -208,18 +208,23 @@ NICOT 提供了一套查询装饰器，用于在 Entity 字段上声明支持的
 
 ### ✅ 内建查询装饰器
 
-| 装饰器名                          | 查询效果                                     |
-|-------------------------------|------------------------------------------|
-| `@QueryEqual()`               | 精确匹配：`WHERE field = :value`              |
-| `@QueryLike()`                | 前缀模糊匹配：`WHERE field LIKE :value%`        |
-| `@QuerySearch()`              | 宽泛模糊搜索：`WHERE field LIKE %:value%`       |
-| `@QueryMatchBoolean()`        | `true/false/1/0` 转换为布尔类型查询               |
-| `@QueryEqualZeroNullable()`   | `0 → IS NULL`，否则 `= :value`（适合 nullable） |
-| `@QueryGreater(field)`        | 大于查询：`WHERE field > :value`              |
-| `@QueryLess(field)`           | 小于查询：`WHERE field < :value`              |
-| `@QueryGreaterOrEqual(field)` | 大于等于查询：`WHERE field >= :value`           |
-| `@QueryLessOrEqual(field)`    | 小于等于查询：`WHERE field <= :value`           |
-| `@QueryFullText(options)`     | 全文搜索查询，只支持 PostgreSQL，会自动建索引             |
+| 装饰器名                                                 | 查询效果                                            |
+|------------------------------------------------------|-------------------------------------------------|
+| `@QueryEqual()`                                      | 精确匹配：`WHERE field = :value`                     |
+| `@QueryLike()`                                       | 前缀模糊匹配：`WHERE field LIKE :value%`               |
+| `@QuerySearch()`                                     | 宽泛模糊搜索：`WHERE field LIKE %:value%`              |
+| `@QueryMatchBoolean()`                               | `true/false/1/0` 转换为布尔类型查询                      |
+| `@QueryEqualZeroNullable()`                          | `0 → IS NULL`，否则 `= :value`（适合 nullable）        |
+| `@QueryIn()`                                         | 包含查询：`WHERE field IN (:...value)`，value 可以数组或者逗号分隔 |
+| `@QueryNotIn()`                                      | 不包含查询：`WHERE field NOT IN (:...value)`          |
+| `@QueryGreater(field)`                               | 大于查询：`WHERE field > :value`                     |
+| `@QueryLess(field)`                                  | 小于查询：`WHERE field < :value`                     |
+| `@QueryGreaterOrEqual(field)`                        | 大于等于查询：`WHERE field >= :value`                  |
+| `@QueryLessOrEqual(field)`                           | 小于等于查询：`WHERE field <= :value`                  |
+| `@QueryJsonbHas()`                                   | JSONB 包含键查询：`WHERE field ? :value`              |
+| `@QueryOperator('=')`                                | 自定义操作符查询：`WHERE field <operator> :value`        |
+| `@QueryWrap((entExpr, valExpr) => `${entExpr} = ${valExpr}`) | 自定义查询片段                                         |
+| `@QueryFullText(options)`                            | 全文搜索查询，只支持 PostgreSQL，会自动建索引                    |
 
 ---
 
@@ -301,6 +306,35 @@ isPublished: boolean;
 @ApiProperty({ enum: ['ASC', 'DESC'], description: 'Order by views' })
 viewsOrderBy?: 'ASC' | 'DESC';
 ```
+
+---
+
+## GetMutator
+
+GET 方法的参数只能是 URL 参数，因此数据类型只能是 string，具有局限性。
+
+NICOT 提供了 `GetMutator` 装饰器，允许你在实体字段上定义一个转换函数，将 URL 参数转换为正确的数据类型，并把 OpenAPI 文档中 GET 接口的数据类型改为目标类型。
+
+### 示例
+
+```ts
+@JsonColumn(SomeObject)
+@GetMutator((val: string) => JSON.parse(val)) // GET 参数不会体现为 SomeObject，而是 string
+@QueryOperator('@>') // JSONB 包含查询
+meta: SomeObject;
+```
+
+### 内建 GetMutator
+
+- `@GetMutatorBool()`
+- `@GetMutatorInt()`
+- `@GetMutatorFloat()`
+- `@GetMutatorStringSeparated(',')`
+- `@GetMutatorIntSeparated()`
+- `@GetMutatorFloatSeparated()`
+- `@GetMutatorJson()`
+
+> `@BoolColumn()` 已经内建了 `@GetMutatorBool()`
 
 ---
 

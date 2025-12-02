@@ -1,4 +1,6 @@
 import { PipeTransform, ValidationPipe } from '@nestjs/common';
+import { AnyClass } from 'nesties';
+import { getSpecificFields } from '../utility/metadata';
 
 export const OptionalDataPipe = () =>
   new ValidationPipe({

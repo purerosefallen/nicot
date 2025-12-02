@@ -2,6 +2,7 @@ import { MetadataSetter, Reflector } from 'typed-reflector';
 import { QueryCond } from '../bases';
 import { AnyClass } from 'nesties';
 import { QueryFullTextColumnOptions } from './query-full-text-column-options.interface';
+import { GetMutatorOptions } from '../decorators/get-mutator';
 
 interface SpecificFields {
   notColumn: { keepInCreate?: boolean };
@@ -12,9 +13,11 @@ interface SpecificFields {
   notInResult: { entityVersioningDate?: boolean };
   relationComputed: () => { entityClass: AnyClass; isArray: boolean };
   queryFullTextColumn: QueryFullTextColumnOptions;
-  boolColumn: boolean;
+  // boolColumn: boolean;
   notRequiredButHasDefault: boolean;
   queryCondition: QueryCond;
+  requireGetMutator: boolean;
+  getMutator: GetMutatorOptions;
 }
 
 type MetadataMap = SpecificFields;
