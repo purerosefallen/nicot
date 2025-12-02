@@ -132,6 +132,7 @@ describe('app', () => {
     expect(userService).toBeDefined();
     const user = new User();
     user.name = 'Yuzu';
+    user.bio = 'Hello I am Yuzu';
     user.age = 20;
     user.gender = Gender.F;
     const createResult = await userService.create(user);
@@ -142,6 +143,30 @@ describe('app', () => {
     expect(getUsers.data).toHaveLength(1);
     const getUsersInvalid = await userService.findAll({ name: 'Yuzu1111' });
     expect(getUsersInvalid.data).toHaveLength(0);
+
+    const getUsersByIn = await userService.findAll({ nameIn: 'Yuzu,Someone' });
+    expect(getUsersByIn.data).toHaveLength(1);
+
+    const getUsersByInInvalid = await userService.findAll({
+      nameIn: 'AAA,BBB',
+    });
+    expect(getUsersByInInvalid.data).toHaveLength(0);
+
+    const getUsersBySearch1 = await userService.findAll({
+      search: 'Yuzu,Anyone',
+    });
+    expect(getUsersBySearch1.data).toHaveLength(1);
+
+    const getUsersBySearch2 = await userService.findAll({
+      search: 'Hello I am Yuzu',
+    });
+    expect(getUsersBySearch2.data).toHaveLength(1);
+
+    const getUsersBySearchInvalid = await userService.findAll({
+      search: 'oooooo',
+    });
+    expect(getUsersBySearchInvalid.data).toHaveLength(0);
+
     await userService.update(createResult.data.id, {
       name: 'Nana',
     });

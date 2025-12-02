@@ -494,7 +494,7 @@ export class RestfulFactory<T extends { id: any }> {
       ] extends [never]
         ? Omit<BaseRestfulController<T>, ExplicitlyDisabledMethods>
         : Pick<BaseRestfulController<T>, ExplicitlyEnabledMethods>) & {
-        service: CrudBase<T>;
+        _service: CrudBase<T>;
       };
 
     const anyTrueWritten = RestfulMethods.some(

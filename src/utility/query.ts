@@ -1,4 +1,4 @@
-import { Brackets, SelectQueryBuilder } from 'typeorm';
+import { SelectQueryBuilder } from 'typeorm';
 import { parseBool } from './parse-bool';
 
 export function createQueryCondition(

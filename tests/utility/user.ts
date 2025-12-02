@@ -10,7 +10,9 @@ import {
   QueryColumn,
   QueryEqual,
   QueryGreater,
+  QueryInSeparated,
   QueryLess,
+  QueryOr,
   RelationComputed,
   StringColumn,
 } from '../../src/decorators';
@@ -37,6 +39,14 @@ export class User extends IdBase() {
   @QueryEqual()
   name: string;
 
+  @Index()
+  @StringColumn(20)
+  bio: string;
+
+  @QueryColumn()
+  @QueryInSeparated('name')
+  nameIn: string;
+
   @IntColumn('int', { unsigned: true })
   age: number;
 
@@ -61,6 +71,9 @@ export class User extends IdBase() {
 
   @OneToMany(() => Book, (book) => book.user)
   books: Book[];
+
+  @QueryOr(QueryInSeparated('name'), QueryEqual('bio'))
+  search: string;
 }
 
 @Entity()
