@@ -13,11 +13,10 @@ interface SpecificFields {
   queryFullTextColumn: QueryFullTextColumnOptions;
   boolColumn: boolean;
   notRequiredButHasDefault: boolean;
-}
-
-interface MetadataMap extends SpecificFields {
   queryCondition: QueryCond;
 }
+
+type MetadataMap = SpecificFields;
 
 type FieldsMap = {
   [K in keyof MetadataMap as `${K}Fields`]: string;

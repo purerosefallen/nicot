@@ -18,6 +18,7 @@ import {
   ReturnMessageDto,
   ClassType,
   getApiProperty,
+  DataPipe,
 } from 'nesties';
 import {
   ApiBadRequestResponse,
@@ -32,8 +33,8 @@ import {
   IntersectionType,
   OmitType,
   PartialType,
+  PickType,
 } from '@nestjs/swagger';
-import { CreatePipe, GetPipe, UpdatePipe } from './decorators';
 import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import _, { upperFirst } from 'lodash';
 import { getNotInResultFields, getSpecificFields } from './utility/metadata';
@@ -57,6 +58,8 @@ import { OmitTypeExclude } from './utility/omit-type-exclude';
 import { nonTransformableTypes } from './utility/non-transformable-types';
 import { PatchColumnsInGet } from './utility/patch-column-in-get';
 import { ParseBoolObjectPipe } from './utility/parse-bool';
+import { OmitPipe, OptionalDataPipe, PickPipe } from './decorators';
+import { Memorize } from './utility/memorize';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
@@ -65,6 +68,7 @@ export interface RestfulFactoryOptions<T> {
   outputFieldsToOmit?: (keyof T)[];
   entityClassName?: string;
   relations?: (string | RelationDef)[];
+  skipNonQueryableFields?: boolean;
 }
 
 const getCurrentLevelRelations = (relations: string[]) =>
@@ -80,34 +84,73 @@ export class RestfulFactory<T extends { id: any }> {
     return this.options.entityClassName || this.entityClass.name;
   }
 
-  readonly fieldsToOmit = _.uniq([
-    ...(getSpecificFields(this.entityClass, 'notColumn') as (keyof T)[]),
-    ...(this.options.fieldsToOmit || []),
-    ...getTypeormRelations(this.entityClass).map(
-      (r) => r.propertyName as keyof T,
-    ),
-  ]);
-  private readonly basicInputDto = OmitTypeExclude(
-    this.entityClass,
-    this.fieldsToOmit,
-  ) as ClassType<T>;
+  @Memorize()
+  get fieldsToOmit() {
+    return _.uniq([
+      ...(getSpecificFields(this.entityClass, 'notColumn') as (keyof T)[]),
+      ...(this.options.fieldsToOmit || []),
+      ...getTypeormRelations(this.entityClass).map(
+        (r) => r.propertyName as keyof T,
+      ),
+    ]);
+  }
 
-  readonly createDto = RenameClass(
-    OmitTypeExclude(
-      this.basicInputDto,
-      getSpecificFields(this.entityClass, 'notWritable') as (keyof T)[],
-    ),
-    `Create${this.entityClass.name}Dto`,
-  ) as ClassType<T>;
-  readonly importDto = ImportDataDto(this.createDto);
+  @Memorize()
+  get fieldsInCreateToOmit() {
+    return _.uniq([
+      ...this.fieldsToOmit,
+      ...(getSpecificFields(this.entityClass, 'notWritable') as (keyof T)[]),
+    ]);
+  }
 
-  private readonly fieldsInGetToOmit = _.uniq([
-    ...this.fieldsToOmit,
-    ...(getSpecificFields(this.entityClass, 'notQueryable') as (keyof T)[]),
-  ]);
+  @Memorize()
+  get createDto() {
+    return RenameClass(
+      OmitTypeExclude(this.entityClass, this.fieldsInCreateToOmit),
+      `Create${this.entityClass.name}Dto`,
+    ) as ClassType<T>;
+  }
 
-  readonly findAllDto = RenameClass(
-    PartialType(
+  @Memorize()
+  get fieldsInUpdateToOmit() {
+    return _.uniq([
+      ...this.fieldsInCreateToOmit,
+      ...(getSpecificFields(this.entityClass, 'notChangeable') as (keyof T)[]),
+    ]);
+  }
+
+  @Memorize()
+  get updateDto() {
+    return RenameClass(
+      PartialType(OmitTypeExclude(this.entityClass, this.fieldsInUpdateToOmit)),
+      `Update${this.entityClass.name}Dto`,
+    ) as ClassType<T>;
+  }
+
+  @Memorize()
+  get importDto() {
+    return ImportDataDto(this.createDto);
+  }
+
+  @Memorize()
+  get fieldsInGetToOmit() {
+    return _.uniq([
+      ...this.fieldsToOmit,
+      ...(getSpecificFields(this.entityClass, 'notQueryable') as (keyof T)[]),
+    ]);
+  }
+
+  @Memorize()
+  get queryableFields() {
+    return _.difference(
+      getSpecificFields(this.entityClass, 'queryCondition') as (keyof T)[],
+      this.fieldsInGetToOmit,
+    );
+  }
+
+  @Memorize()
+  get findAllDto() {
+    let cl = PartialType(
       PatchColumnsInGet(
         OmitTypeExclude(
           this.entityClass instanceof PageSettingsDto
@@ -121,28 +164,26 @@ export class RestfulFactory<T extends { id: any }> {
         this.entityClass,
         this.fieldsInGetToOmit as string[],
       ),
-    ),
-    `Find${this.entityClass.name}Dto`,
-  ) as ClassType<T>;
+    ) as ClassType<T>;
+    if (this.options.skipNonQueryableFields) {
+      cl = PickType(cl, this.queryableFields);
+    }
+    return RenameClass(cl, `Find${this.entityClass.name}Dto`) as ClassType<T>;
+  }
 
-  readonly findAllCursorPaginatedDto = RenameClass(
-    IntersectionType(
-      OmitTypeExclude(this.findAllDto, ['pageCount' as keyof T]),
-      CursorPaginationDto,
-    ),
-    `Find${this.entityClass.name}CursorPaginatedDto`,
-  ) as unknown as ClassType<T>;
-  readonly updateDto = RenameClass(
-    PartialType(
-      OmitTypeExclude(
-        this.createDto,
-        getSpecificFields(this.entityClass, 'notChangeable') as (keyof T)[],
+  @Memorize()
+  get findAllCursorPaginatedDto() {
+    return RenameClass(
+      IntersectionType(
+        OmitTypeExclude(this.findAllDto, ['pageCount' as keyof T]),
+        CursorPaginationDto,
       ),
-    ),
-    `Update${this.entityClass.name}Dto`,
-  ) as ClassType<T>;
+      `Find${this.entityClass.name}CursorPaginatedDto`,
+    ) as unknown as ClassType<T>;
+  }
 
-  private resolveEntityResultDto() {
+  @Memorize()
+  get entityResultDto() {
     const relations = getTypeormRelations(this.entityClass);
     const currentLevelRelations =
       this.options.relations &&
@@ -237,39 +278,57 @@ export class RestfulFactory<T extends { id: any }> {
     return res;
   }
 
-  readonly entityResultDto = this.resolveEntityResultDto();
-  readonly entityCreateResultDto = RenameClass(
-    OmitType(this.entityResultDto, [
-      ...getTypeormRelations(this.entityClass).map(
-        (r) => r.propertyName as keyof T,
-      ),
-      ...(getSpecificFields(
-        this.entityClass,
-        'notColumn',
-        (m) => !m.keepInCreate,
-      ) as (keyof T)[]),
-    ]),
-    `${this.getEntityClassName()}CreateResultDto`,
-  );
+  @Memorize()
+  get entityCreateResultDto() {
+    return RenameClass(
+      OmitType(this.entityResultDto, [
+        ...getTypeormRelations(this.entityClass).map(
+          (r) => r.propertyName as keyof T,
+        ),
+        ...(getSpecificFields(
+          this.entityClass,
+          'notColumn',
+          (m) => !m.keepInCreate,
+        ) as (keyof T)[]),
+      ]),
+      `${this.getEntityClassName()}CreateResultDto`,
+    );
+  }
 
-  readonly entityReturnMessageDto = ReturnMessageDto(this.entityResultDto);
-  readonly entityCreateReturnMessageDto = ReturnMessageDto(
-    this.entityCreateResultDto,
-  );
-  readonly entityArrayReturnMessageDto = PaginatedReturnMessageDto(
-    this.entityResultDto,
-  );
-  readonly entityCursorPaginationReturnMessageDto =
-    CursorPaginationReturnMessageDto(this.entityResultDto);
-  readonly importReturnMessageDto = ReturnMessageDto([
-    ImportEntryDto(this.entityCreateResultDto),
-  ]);
+  @Memorize()
+  get entityReturnMessageDto() {
+    return ReturnMessageDto(this.entityResultDto);
+  }
+
+  @Memorize()
+  get entityCreateReturnMessageDto() {
+    return ReturnMessageDto(this.entityCreateResultDto);
+  }
+
+  @Memorize()
+  get entityArrayReturnMessageDto() {
+    return PaginatedReturnMessageDto(this.entityResultDto);
+  }
+
+  @Memorize()
+  get entityCursorPaginationReturnMessageDto() {
+    return CursorPaginationReturnMessageDto(this.entityResultDto);
+  }
+
+  @Memorize()
+  get importReturnMessageDto() {
+    return ReturnMessageDto([ImportEntryDto(this.entityCreateResultDto)]);
+  }
+
   // eslint-disable-next-line @typescript-eslint/ban-types
-  readonly idType: Function = Reflect.getMetadata(
-    'design:type',
-    this.entityClass.prototype,
-    'id',
-  );
+  @Memorize()
+  get idType(): Function {
+    return Reflect.getMetadata(
+      'design:type',
+      this.entityClass.prototype,
+      'id',
+    );
+  }
 
   constructor(
     public readonly entityClass: ClassType<T>,
@@ -319,7 +378,7 @@ export class RestfulFactory<T extends { id: any }> {
   }
 
   createParam() {
-    return Body(CreatePipe());
+    return Body(DataPipe(), OmitPipe(this.fieldsInCreateToOmit));
   }
 
   findOne(extras: Partial<OperationObject> = {}): MethodDecorator {
@@ -377,10 +436,14 @@ export class RestfulFactory<T extends { id: any }> {
 
   findAllParam() {
     const boolColumns = this.getBoolColumns();
+    const restPipes = [OptionalDataPipe(), OmitPipe(this.fieldsInGetToOmit)];
+    if (this.options.skipNonQueryableFields) {
+      restPipes.push(PickPipe(this.queryableFields));
+    }
     if (boolColumns.length) {
-      return Query(new ParseBoolObjectPipe(boolColumns), GetPipe());
+      return Query(new ParseBoolObjectPipe(boolColumns), ...restPipes);
     } else {
-      return Query(GetPipe());
+      return Query(...restPipes);
     }
   }
 
@@ -411,7 +474,7 @@ export class RestfulFactory<T extends { id: any }> {
   }
 
   updateParam() {
-    return Body(UpdatePipe());
+    return Body(OptionalDataPipe(), OmitPipe(this.fieldsInUpdateToOmit));
   }
 
   delete(extras: Partial<OperationObject> = {}): MethodDecorator {
