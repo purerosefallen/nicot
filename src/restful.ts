@@ -54,7 +54,7 @@ import {
   filterRelations,
   extractRelationName,
 } from './utility/filter-relations';
-import { OmitTypeExclude } from './utility/omit-type-exclude';
+import { OmitTypeExclude, PickTypeExpose } from './utility/omit-type-exclude';
 import { nonTransformableTypes } from './utility/non-transformable-types';
 import { PatchColumnsInGet } from './utility/patch-column-in-get';
 import { ParseBoolObjectPipe } from './utility/parse-bool';
@@ -63,9 +63,13 @@ import { Memorize } from './utility/memorize';
 
 export interface RestfulFactoryOptions<T> {
   fieldsToOmit?: (keyof T)[];
+  writeFieldsToOmit?: (keyof T)[];
+  createFieldsToOmit?: (keyof T)[];
+  updateFieldsToOmit?: (keyof T)[];
+  findAllFieldsToOmit?: (keyof T)[];
+  outputFieldsToOmit?: (keyof T)[];
   prefix?: string;
   keepEntityVersioningDates?: boolean;
-  outputFieldsToOmit?: (keyof T)[];
   entityClassName?: string;
   relations?: (string | RelationDef)[];
   skipNonQueryableFields?: boolean;
@@ -99,7 +103,10 @@ export class RestfulFactory<T extends { id: any }> {
   get fieldsInCreateToOmit() {
     return _.uniq([
       ...this.fieldsToOmit,
+      ...(this.options.writeFieldsToOmit || []),
+      ...(this.options.createFieldsToOmit || []),
       ...(getSpecificFields(this.entityClass, 'notWritable') as (keyof T)[]),
+      ...(getSpecificFields(this.entityClass, 'notCreatable') as (keyof T)[]),
     ]);
   }
 
@@ -114,7 +121,10 @@ export class RestfulFactory<T extends { id: any }> {
   @Memorize()
   get fieldsInUpdateToOmit() {
     return _.uniq([
-      ...this.fieldsInCreateToOmit,
+      ...this.fieldsToOmit,
+      ...(this.options.writeFieldsToOmit || []),
+      ...(this.options.updateFieldsToOmit || []),
+      ...(getSpecificFields(this.entityClass, 'notWritable') as (keyof T)[]),
       ...(getSpecificFields(this.entityClass, 'notChangeable') as (keyof T)[]),
     ]);
   }
@@ -166,7 +176,7 @@ export class RestfulFactory<T extends { id: any }> {
       ),
     ) as ClassType<T>;
     if (this.options.skipNonQueryableFields) {
-      cl = PickType(cl, this.queryableFields);
+      cl = PickTypeExpose(cl, this.queryableFields) as ClassType<T>;
     }
     return RenameClass(cl, `Find${this.entityClass.name}Dto`) as ClassType<T>;
   }
@@ -320,14 +330,10 @@ export class RestfulFactory<T extends { id: any }> {
     return ReturnMessageDto([ImportEntryDto(this.entityCreateResultDto)]);
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-types
   @Memorize()
-  get idType(): Function {
-    return Reflect.getMetadata(
-      'design:type',
-      this.entityClass.prototype,
-      'id',
-    );
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  get idType(): StringConstructor | NumberConstructor {
+    return Reflect.getMetadata('design:type', this.entityClass.prototype, 'id');
   }
 
   constructor(

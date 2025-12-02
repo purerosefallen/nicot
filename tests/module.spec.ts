@@ -88,7 +88,6 @@ describe('dummy1', () => {
   });
 });
 
-/*
 describe('app', () => {
   let app: NestExpressApplication;
 
@@ -888,9 +887,10 @@ describe('app', () => {
 
   const testHttpServer = async (path: string) => {
     const server = await app.getHttpServer();
+    const badDate = new Date(0x3f3f3f3f);
     await request(server)
       .post(`/${path}`)
-      .send({ name: 'Yuzu', age: 20, gender: 'F' })
+      .send({ name: 'Yuzu', age: 20, gender: 'F', createdAt: badDate })
       .expect(200);
     await request(server)
       .get(`/${path}/1`)
@@ -902,6 +902,9 @@ describe('app', () => {
           age: 20,
           gender: 'F',
         });
+        // createdAt should not be the badDate
+        const createdAt = new Date(res.body.data.createdAt);
+        expect(createdAt.getTime()).not.toEqual(badDate.getTime());
       });
     await request(server)
       .get(`/${path}?name=Yuzu`)
@@ -923,7 +926,7 @@ describe('app', () => {
 
     await request(server)
       .patch(`/${path}/1`)
-      .send({ name: 'Nana' })
+      .send({ name: 'Nana', gender: 'M' })
       .expect(200);
     await request(server)
       .get(`/${path}/1`)
@@ -934,7 +937,7 @@ describe('app', () => {
           id: 1,
           name: 'Nana',
           age: 20,
-          gender: 'F',
+          gender: 'F', // gender is not updated because it's NotChangeable
         });
       });
     await request(server).delete(`/${path}/1`).expect(200);
@@ -1029,4 +1032,3 @@ describe('app', () => {
       });
   });
 });
-*/

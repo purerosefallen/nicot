@@ -56,6 +56,6 @@ describe('Relation filter', () => {
         new RestfulFactory(User, {
           relations: ['books', 'books.name'],
         }),
-    ).toThrow('Relation name not found in Book (Reading name in Book)');
+    ).toThrow('Relation name not found in Book (Reading books.name in User)');
   });
 });

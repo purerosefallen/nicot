@@ -6,6 +6,7 @@ import { QueryFullTextColumnOptions } from './query-full-text-column-options.int
 interface SpecificFields {
   notColumn: { keepInCreate?: boolean };
   notWritable: boolean;
+  notCreatable: boolean;
   notChangeable: boolean;
   notQueryable: boolean;
   notInResult: { entityVersioningDate?: boolean };
