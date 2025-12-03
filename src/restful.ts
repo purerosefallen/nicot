@@ -257,9 +257,9 @@ export class RestfulFactory<
         );
         ApiProperty({
           ...oldApiProperty,
-          required: false,
+          // required: false,
           type: () => (relation.isArray ? [useClass[0]] : useClass[0]),
-        })(resultDto.prototype, relation.propertyName);
+        } as ApiPropertyOptions)(resultDto.prototype, relation.propertyName);
       };
       const existing = this.__resolveVisited.get(relation.propertyClass);
       if (existing) {
