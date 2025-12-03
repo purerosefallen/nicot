@@ -11,6 +11,7 @@ import {
 } from '../decorators';
 import { IsNotEmpty } from 'class-validator';
 import { MergePropertyDecorators } from 'nesties';
+import { Metadata } from '../utility/metadata';
 
 export interface IdOptions {
   description?: string;
@@ -37,6 +38,11 @@ export function IdBase(idOptions: IdOptions = {}) {
     Reflect.metadata('design:type', Number),
     Generated('increment'),
     QueryEqual(),
+    Metadata.set(
+      'notRequiredButHasDefault',
+      true,
+      'notRequiredButHasDefaultFields',
+    ),
   ]);
   dec(cl.prototype, 'id');
   return cl;
@@ -69,6 +75,11 @@ export function StringIdBase(idOptions: StringIdOptions) {
   const decs = [
     Reflect.metadata('design:type', String),
     QueryEqual(),
+    Metadata.set(
+      'notRequiredButHasDefault',
+      true,
+      'notRequiredButHasDefaultFields',
+    ),
     ...(idOptions.uuid
       ? [UuidColumn({ ...columnOptions, generated: true }), NotWritable()]
       : [
