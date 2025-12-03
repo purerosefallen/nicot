@@ -520,6 +520,26 @@ isActive: boolean;
 
 ---
 
+### RestfulFactory 配置项
+
+```ts
+export interface RestfulFactoryOptions<T> {
+  fieldsToOmit?: (keyof T)[]; // 不出现在任何输入 DTO 中的字段
+  writeFieldsToOmit?: (keyof T)[]; // 不出现在创建与更新 DTO 中的字段
+  createFieldsToOmit?: (keyof T)[]; // 不出现在创建 DTO 中的字段
+  updateFieldsToOmit?: (keyof T)[]; // 不出现在更新 DTO 中的字段
+  findAllFieldsToOmit?: (keyof T)[]; // 不出现在查询 DTO 中的字段
+  outputFieldsToOmit?: (keyof T)[]; // 不出现在任何输出 DTO 中的字段
+  prefix?: string; // 接口的路由前缀
+  keepEntityVersioningDates?: boolean; // 在返回结果中保留实体的 createTime / updateTime 字段
+  entityClassName?: string; // 实体类名称，如果存在同一 Entity 的多个 RestfulFactory 实例时需要指定，避免 OpenAPI 类型冲突
+  relations?: (string | RelationDef)[]; // 关联加载的关系字段，传给 CrudService 的 relations 参数，以及用于生成关系 DTO
+  skipNonQueryableFields?: boolean; // 在查询 DTO 中跳过所有没有 @QueryXXX() 装饰器的字段
+}
+```
+
+---
+
 ### 示例 Controller
 
 ```ts
