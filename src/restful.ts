@@ -33,7 +33,6 @@ import {
   IntersectionType,
   OmitType,
   PartialType,
-  PickType,
 } from '@nestjs/swagger';
 import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import _, { upperFirst } from 'lodash';
@@ -61,13 +60,21 @@ import { OmitPipe, OptionalDataPipe, PickPipe } from './decorators';
 import { Memorize } from './utility/memorize';
 import { MutatorPipe } from './utility/mutate-pipe';
 
-export interface RestfulFactoryOptions<T> {
-  fieldsToOmit?: (keyof T)[];
-  writeFieldsToOmit?: (keyof T)[];
-  createFieldsToOmit?: (keyof T)[];
-  updateFieldsToOmit?: (keyof T)[];
-  findAllFieldsToOmit?: (keyof T)[];
-  outputFieldsToOmit?: (keyof T)[];
+export interface RestfulFactoryOptions<
+  T,
+  O extends keyof T = never,
+  W extends keyof T = never,
+  C extends keyof T = never,
+  U extends keyof T = never,
+  F extends keyof T = never,
+  R extends keyof T = never,
+> {
+  fieldsToOmit?: O[];
+  writeFieldsToOmit?: W[];
+  createFieldsToOmit?: C[];
+  updateFieldsToOmit?: U[];
+  findAllFieldsToOmit?: F[];
+  outputFieldsToOmit?: R[];
   prefix?: string;
   keepEntityVersioningDates?: boolean;
   entityClassName?: string;
@@ -83,7 +90,26 @@ const getNextLevelRelations = (relations: string[], enteringField: string) =>
     .filter((r) => r.includes('.') && r.startsWith(`${enteringField}.`))
     .map((r) => r.split('.').slice(1).join('.'));
 
-export class RestfulFactory<T extends { id: any }> {
+export class RestfulFactory<
+  T extends { id: any },
+  O extends keyof T = never,
+  W extends keyof T = never,
+  C extends keyof T = never,
+  U extends keyof T = never,
+  F extends keyof T = never,
+  R extends keyof T = never,
+> {
+  constructor(
+    public readonly entityClass: ClassType<T>,
+    private options: RestfulFactoryOptions<T, O, W, C, U, F, R> = {},
+    private __resolveVisited = new Map<AnyClass, [AnyClass]>(),
+  ) {
+    if (options.relations) {
+      // we have to filter once to ensure every relation is correct
+      filterRelations(entityClass, options.relations);
+    }
+  }
+
   private getEntityClassName() {
     return this.options.entityClassName || this.entityClass.name;
   }
@@ -115,7 +141,7 @@ export class RestfulFactory<T extends { id: any }> {
     return RenameClass(
       OmitTypeExclude(this.entityClass, this.fieldsInCreateToOmit),
       `Create${this.entityClass.name}Dto`,
-    ) as ClassType<T>;
+    ) as ClassType<Omit<T, O | W | C>>;
   }
 
   @Memorize()
@@ -134,7 +160,7 @@ export class RestfulFactory<T extends { id: any }> {
     return RenameClass(
       PartialType(OmitTypeExclude(this.entityClass, this.fieldsInUpdateToOmit)),
       `Update${this.entityClass.name}Dto`,
-    ) as ClassType<T>;
+    ) as ClassType<Omit<T, O | W | U>>;
   }
 
   @Memorize()
@@ -182,14 +208,16 @@ export class RestfulFactory<T extends { id: any }> {
     if (this.options.skipNonQueryableFields) {
       cl = PickTypeExpose(cl, this.queryableFields) as ClassType<T>;
     }
-    return RenameClass(cl, `Find${this.entityClass.name}Dto`) as ClassType<T>;
+    return RenameClass(cl, `Find${this.entityClass.name}Dto`) as ClassType<
+      Omit<T, O | F>
+    >;
   }
 
   @Memorize()
   get findAllCursorPaginatedDto() {
     return RenameClass(
       IntersectionType(
-        OmitTypeExclude(this.findAllDto, ['pageCount' as keyof T]),
+        OmitTypeExclude(this.findAllDto, ['pageCount' as keyof Omit<T, O | F>]),
         CursorPaginationDto,
       ),
       `Find${this.entityClass.name}CursorPaginatedDto`,
@@ -284,7 +312,7 @@ export class RestfulFactory<T extends { id: any }> {
     const res = RenameClass(
       resultDto,
       `${this.getEntityClassName()}ResultDto`,
-    ) as ClassType<T>;
+    ) as ClassType<Omit<T, R>>;
     const currentContainer = this.__resolveVisited.get(this.entityClass);
     if (currentContainer) {
       currentContainer[0] = res;
@@ -303,10 +331,10 @@ export class RestfulFactory<T extends { id: any }> {
           this.entityClass,
           'notColumn',
           (m) => !m.keepInCreate,
-        ) as (keyof T)[]),
+        ) as any[]),
       ]),
       `${this.getEntityClassName()}CreateResultDto`,
-    );
+    ) as ClassType<Omit<T, R>>;
   }
 
   @Memorize()
@@ -338,17 +366,6 @@ export class RestfulFactory<T extends { id: any }> {
   // eslint-disable-next-line @typescript-eslint/ban-types
   get idType(): StringConstructor | NumberConstructor {
     return Reflect.getMetadata('design:type', this.entityClass.prototype, 'id');
-  }
-
-  constructor(
-    public readonly entityClass: ClassType<T>,
-    private options: RestfulFactoryOptions<T> = {},
-    private __resolveVisited = new Map<AnyClass, [AnyClass]>(),
-  ) {
-    if (options.relations) {
-      // we have to filter once to ensure every relation is correct
-      filterRelations(entityClass, options.relations);
-    }
   }
 
   private usePrefix(
@@ -602,7 +619,7 @@ export class RestfulFactory<T extends { id: any }> {
             ? OmitType(this.findAllDto, [
                 'pageCount',
                 'recordsPerPage',
-              ] as (keyof T)[])
+              ] as (keyof Omit<T, O | F>)[])
             : this.findAllDto,
         ],
         paramDecorators: () => [this.findAllParam()],
