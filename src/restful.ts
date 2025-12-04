@@ -110,7 +110,143 @@ export class RestfulFactory<
     }
   }
 
-  private getEntityClassName() {
+  omitInput<K extends keyof T>(...fields: K[]) {
+    return new RestfulFactory<T, O | K, W, C, U, F, R>(
+      this.entityClass,
+      {
+        ...this.options,
+        fieldsToOmit: _.uniq([...(this.options.fieldsToOmit || []), ...fields]),
+      },
+      this.__resolveVisited,
+    );
+  }
+
+  omitWrite<K extends keyof T>(...fields: K[]) {
+    return new RestfulFactory<T, O, W | K, C, U, F, R>(
+      this.entityClass,
+      {
+        ...this.options,
+        writeFieldsToOmit: _.uniq([
+          ...(this.options.writeFieldsToOmit || []),
+          ...fields,
+        ]),
+      },
+      this.__resolveVisited,
+    );
+  }
+
+  omitCreate<K extends keyof T>(...fields: K[]) {
+    return new RestfulFactory<T, O, W, C | K, U, F, R>(
+      this.entityClass,
+      {
+        ...this.options,
+        createFieldsToOmit: _.uniq([
+          ...(this.options.createFieldsToOmit || []),
+          ...fields,
+        ]),
+      },
+      this.__resolveVisited,
+    );
+  }
+
+  omitUpdate<K extends keyof T>(...fields: K[]) {
+    return new RestfulFactory<T, O, W, C, U | K, F, R>(
+      this.entityClass,
+      {
+        ...this.options,
+        updateFieldsToOmit: _.uniq([
+          ...(this.options.updateFieldsToOmit || []),
+          ...fields,
+        ]),
+      },
+      this.__resolveVisited,
+    );
+  }
+
+  omitFindAll<K extends keyof T>(...fields: K[]) {
+    return new RestfulFactory<T, O, W, C, U, F | K, R>(
+      this.entityClass,
+      {
+        ...this.options,
+        findAllFieldsToOmit: _.uniq([
+          ...(this.options.findAllFieldsToOmit || []),
+          ...fields,
+        ]),
+      },
+      this.__resolveVisited,
+    );
+  }
+
+  omitOutput<K extends keyof T>(...fields: K[]) {
+    return new RestfulFactory<T, O, W, C, U, F, R | K>(
+      this.entityClass,
+      {
+        ...this.options,
+        outputFieldsToOmit: _.uniq([
+          ...(this.options.outputFieldsToOmit || []),
+          ...fields,
+        ]),
+      },
+      this.__resolveVisited,
+    );
+  }
+
+  pathPrefix(prefix: string) {
+    return new RestfulFactory<T, O, W, C, U, F, R>(
+      this.entityClass,
+      {
+        ...this.options,
+        prefix,
+      },
+      this.__resolveVisited,
+    );
+  }
+
+  keepEntityVersioningDates(enable = true) {
+    return new RestfulFactory<T, O, W, C, U, F, R>(
+      this.entityClass,
+      {
+        ...this.options,
+        keepEntityVersioningDates: enable,
+      },
+      this.__resolveVisited,
+    );
+  }
+
+  skipNonQueryableFields(enable = true) {
+    return new RestfulFactory<T, O, W, C, U, F, R>(
+      this.entityClass,
+      {
+        ...this.options,
+        skipNonQueryableFields: enable,
+      },
+      this.__resolveVisited,
+    );
+  }
+
+  renameEntityClass(name: string) {
+    return new RestfulFactory<T, O, W, C, U, F, R>(
+      this.entityClass,
+      {
+        ...this.options,
+        entityClassName: name,
+      },
+      this.__resolveVisited,
+    );
+  }
+
+  useRelations(...relations: (string | RelationDef)[]) {
+    return new RestfulFactory<T, O, W, C, U, F, R>(
+      this.entityClass,
+      {
+        ...this.options,
+        relations: [...(this.options.relations || []), ...relations],
+      },
+      this.__resolveVisited,
+    );
+  }
+
+  get entityClassName() {
     return this.options.entityClassName || this.entityClass.name;
   }
 
@@ -140,7 +276,7 @@ export class RestfulFactory<
   get createDto() {
     return RenameClass(
       OmitTypeExclude(this.entityClass, this.fieldsInCreateToOmit),
-      `Create${this.entityClass.name}Dto`,
+      `Create${this.entityClassName}Dto`,
     ) as ClassType<Omit<T, O | W | C>>;
   }
 
@@ -159,7 +295,7 @@ export class RestfulFactory<
   get updateDto() {
     return RenameClass(
       PartialType(OmitTypeExclude(this.entityClass, this.fieldsInUpdateToOmit)),
-      `Update${this.entityClass.name}Dto`,
+      `Update${this.entityClassName}Dto`,
     ) as ClassType<Omit<T, O | W | U>>;
   }
 
@@ -208,7 +344,7 @@ export class RestfulFactory<
     if (this.options.skipNonQueryableFields) {
       cl = PickTypeExpose(cl, this.queryableFields) as ClassType<T>;
     }
-    return RenameClass(cl, `Find${this.entityClass.name}Dto`) as ClassType<
+    return RenameClass(cl, `Find${this.entityClassName}Dto`) as ClassType<
       Omit<T, O | F>
     >;
   }
@@ -220,7 +356,7 @@ export class RestfulFactory<
         OmitTypeExclude(this.findAllDto, ['pageCount' as keyof Omit<T, O | F>]),
         CursorPaginationDto,
       ),
-      `Find${this.entityClass.name}CursorPaginatedDto`,
+      `Find${this.entityClassName}CursorPaginatedDto`,
     ) as unknown as ClassType<T>;
   }
 
@@ -274,7 +410,7 @@ export class RestfulFactory<
         const relationFactory = new RestfulFactory(
           relation.propertyClass,
           {
-            entityClassName: `${this.getEntityClassName()}${
+            entityClassName: `${this.entityClassName}${
               this.options.relations
                 ? upperFirst(relation.propertyName)
                 : relation.propertyClass.name
@@ -311,7 +447,7 @@ export class RestfulFactory<
     }
     const res = RenameClass(
       resultDto,
-      `${this.getEntityClassName()}ResultDto`,
+      `${this.entityClassName}ResultDto`,
     ) as ClassType<Omit<T, R>>;
     const currentContainer = this.__resolveVisited.get(this.entityClass);
     if (currentContainer) {
@@ -333,7 +469,7 @@ export class RestfulFactory<
           (m) => !m.keepInCreate,
         ) as any[]),
       ]),
-      `${this.getEntityClassName()}CreateResultDto`,
+      `${this.entityClassName}CreateResultDto`,
     ) as ClassType<Omit<T, R>>;
   }
 
@@ -392,14 +528,14 @@ export class RestfulFactory<
       this.usePrefix(Post),
       HttpCode(200),
       ApiOperation({
-        summary: `Create a new ${this.getEntityClassName()}`,
+        summary: `Create a new ${this.entityClassName}`,
         ...extras,
       }),
       ApiBody({ type: this.createDto }),
       ApiOkResponse({ type: this.entityCreateReturnMessageDto }),
       ApiBadRequestResponse({
         type: BlankReturnMessageDto,
-        description: `The ${this.getEntityClassName()} is not valid`,
+        description: `The ${this.entityClassName} is not valid`,
       }),
     ]);
   }
@@ -412,14 +548,14 @@ export class RestfulFactory<
     return MergeMethodDecorators([
       this.usePrefix(Get, ':id'),
       ApiOperation({
-        summary: `Find a ${this.getEntityClassName()} by id`,
+        summary: `Find a ${this.entityClassName} by id`,
         ...extras,
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiOkResponse({ type: this.entityReturnMessageDto }),
       ApiNotFoundResponse({
         type: BlankReturnMessageDto,
-        description: `The ${this.getEntityClassName()} with the given id was not found`,
+        description: `The ${this.entityClassName} with the given id was not found`,
       }),
     ]);
   }
@@ -436,7 +572,7 @@ export class RestfulFactory<
     return MergeMethodDecorators([
       this.usePrefix(Get),
       ApiOperation({
-        summary: `Find all ${this.getEntityClassName()}`,
+        summary: `Find all ${this.entityClassName}`,
         ...extras,
       }),
       ApiOkResponse({ type: this.entityArrayReturnMessageDto }),
@@ -449,7 +585,7 @@ export class RestfulFactory<
     return MergeMethodDecorators([
       this.usePrefix(Get),
       ApiOperation({
-        summary: `Find all ${this.getEntityClassName()}`,
+        summary: `Find all ${this.entityClassName}`,
         ...extras,
       }),
       ApiOkResponse({ type: this.entityCursorPaginationReturnMessageDto }),
@@ -479,7 +615,7 @@ export class RestfulFactory<
       this.usePrefix(Patch, ':id'),
       HttpCode(200),
       ApiOperation({
-        summary: `Update a ${this.getEntityClassName()} by id`,
+        summary: `Update a ${this.entityClassName} by id`,
         ...extras,
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
@@ -487,11 +623,11 @@ export class RestfulFactory<
       ApiOkResponse({ type: BlankReturnMessageDto }),
       ApiNotFoundResponse({
         type: BlankReturnMessageDto,
-        description: `The ${this.getEntityClassName()} with the given id was not found`,
+        description: `The ${this.entityClassName} with the given id was not found`,
       }),
       ApiBadRequestResponse({
         type: BlankReturnMessageDto,
-        description: `The ${this.getEntityClassName()} is not valid`,
+        description: `The ${this.entityClassName} is not valid`,
       }),
       ApiInternalServerErrorResponse({
         type: BlankReturnMessageDto,
@@ -509,14 +645,14 @@ export class RestfulFactory<
       this.usePrefix(Delete, ':id'),
       HttpCode(200),
       ApiOperation({
-        summary: `Delete a ${this.getEntityClassName()} by id`,
+        summary: `Delete a ${this.entityClassName} by id`,
         ...extras,
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiOkResponse({ type: BlankReturnMessageDto }),
       ApiNotFoundResponse({
         type: BlankReturnMessageDto,
-        description: `The ${this.getEntityClassName()} with the given id was not found`,
+        description: `The ${this.entityClassName} with the given id was not found`,
       }),
       ApiInternalServerErrorResponse({
         type: BlankReturnMessageDto,
@@ -530,7 +666,7 @@ export class RestfulFactory<
       Post('import'),
       HttpCode(200),
       ApiOperation({
-        summary: `Import ${this.getEntityClassName()}`,
+        summary: `Import ${this.entityClassName}`,
         ...extras,
       }),
       ApiBody({ type: this.importDto }),
@@ -717,7 +853,7 @@ export class RestfulFactory<
       });
     }
 
-    return RenameClass(cl, `${this.getEntityClassName()}Controller`);
+    return RenameClass(cl, `${this.entityClassName}Controller`);
   }
 
   crudService(options: CrudOptions<T> = {}) {
