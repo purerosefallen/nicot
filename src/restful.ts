@@ -183,7 +183,12 @@ export class RestfulFactory<
   @Memorize()
   get queryableFields() {
     return _.difference(
-      getSpecificFields(this.entityClass, 'queryCondition') as (keyof T)[],
+      [
+        ...getSpecificFields(this.entityClass, 'queryCondition'),
+        'pageCount',
+        'recordsPerPage',
+        'paginationCursor',
+      ] as (keyof T)[],
       this.fieldsInGetToOmit,
     );
   }

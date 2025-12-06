@@ -12,7 +12,7 @@ import {
   getClassFromClassOrArray,
   InsertField,
 } from 'nesties';
-import { NotInResult, NotWritable } from '../decorators';
+import { NotInResult, NotWritable, QueryManual } from '../decorators';
 
 export class CursorPaginationDto {
   @NotWritable()
@@ -25,6 +25,7 @@ export class CursorPaginationDto {
     type: String,
   })
   @NotInResult()
+  @QueryManual()
   paginationCursor: string;
 
   @NotWritable()
@@ -37,6 +38,7 @@ export class CursorPaginationDto {
     minimum: 1,
   })
   @NotInResult()
+  @QueryManual()
   recordsPerPage: number;
 }
 
