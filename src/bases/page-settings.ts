@@ -1,8 +1,7 @@
-import { NotInResult, NotWritable } from '../decorators';
+import { NotInResult, NotWritable, QueryManual } from '../decorators';
 import { SelectQueryBuilder } from 'typeorm';
 import { IsInt, IsPositive } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { reflector } from '../utility/metadata';
 import { PageSettingsWise } from 'nesties';
 
 export interface PageSettingsFactory {
@@ -33,6 +32,7 @@ export class PageSettingsDto
   })
   @NotInResult()
   @Reflect.metadata('design:type', Number)
+  @QueryManual()
   pageCount: number;
 
   @NotWritable()
@@ -44,6 +44,7 @@ export class PageSettingsDto
     minimum: 1,
   })
   @NotInResult()
+  @QueryManual()
   @Reflect.metadata('design:type', Number)
   recordsPerPage: number;
 
