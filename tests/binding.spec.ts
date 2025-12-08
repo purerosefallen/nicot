@@ -47,6 +47,11 @@ class ArticleService extends CrudService(Article) {
   }
 
   @BindingValue('app')
+  async getTestAppId() {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return this._testAppId;
+  }
+
   private _testAppId: number;
 
   constructor(@InjectRepository(Article) repo) {
@@ -106,8 +111,6 @@ describe('binding', () => {
   afterAll(async () => {
     await app.close();
   });
-
-  // ----------------- 1. @BindingValue 写法 -----------------
 
   it('@BindingValue(method) should limit rows by current user', async () => {
     const noopRes = await articleService.create({
