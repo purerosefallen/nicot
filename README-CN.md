@@ -199,6 +199,240 @@ meta: SomeJSONType; // ?meta={"foo":"bar"} → 对象
 
 ---
 
+## 🔐 Binding Context（数据绑定 / 多租户隔离）
+
+在实际的业务系统中，后端经常需要根据“当前用户 / 当前租户 / 当前 App”等上下文，对数据进行自动隔离：
+
+- 一个用户只能看到自己的数据
+- 不同 App 的数据不能相互越界
+- 更新 / 删除操作必须自动附带权限条件
+- 不希望每个 Controller/Service 都写重复的 `qb.andWhere(...)`
+
+NICOT 提供了 **BindingColumn / BindingValue / useBinding / beforeSuper / RequestScope Provider**，  
+让多租户隔离变成 **实体级声明**，和 DTO / Query / Lifecycle 保持一致。
+
+---
+
+### 1. BindingColumn — 声明“这个字段必须被绑定”
+
+当某个字段的值应该由后端上下文（而不是前端请求）决定时，应使用 `@BindingColumn`。
+
+示例：
+
+```ts
+@Entity()
+class Article extends IdBase() {
+  @BindingColumn()        // 默认 bindingKey: "default"
+  @IntColumn('int')
+  userId: number;
+  
+  @BindingColumn('app')   // bindingKey: "app"
+  @IntColumn('int')
+  appId: number;
+}
+```
+
+含义：
+
+- **Create**：NICOT 会自动写入绑定值，无需前端提供
+- **FindAll**：NICOT 会自动在 WHERE 中加入 userId/appId 条件
+- **Update/Delete**：NICOT 会自动加上绑定条件，防止越权修改
+- 这是“多租户字段”或“业务隔离字段”的最直接声明方式
+
+这样做的好处：
+
+- 权限隔离逻辑不会散落在 controller/service 里
+- Entity = Contract → 数据隔离是实体的一部分
+- 自动生成的控制器天然具备隔离能力
+
+---
+
+### 2. BindingValue — 绑定值的来源（Service 层）
+
+BindingColumn 声明了“需要绑定的字段”，  
+BindingValue 声明“绑定值从哪里来”。
+
+示例：
+
+```ts
+@Injectable()
+class ArticleService extends CrudService(Article) {
+  @BindingValue()   // 对应 BindingColumn()
+  get currentUserId() {
+    return this.ctx.userId;
+  }
+  
+  @BindingValue('app')
+  get currentAppId() {
+    return this.ctx.appId;
+  }
+}
+```
+
+BindingValue 可以定义成：
+
+- 方法（NICOT 会自动调用）
+- getter 属性
+
+它们会在 CRUD pre-phase 被收集成：
+
+- create：强制写入字段
+- findAll/update/delete：用于 WHERE 条件
+
+优先级高于前端传入值。
+
+---
+
+### 3. useBinding — 本次调用临时覆盖绑定值
+
+适合：
+
+- 测试
+- CLI 脚本
+- 内部批处理任务
+- 覆盖默认绑定行为
+
+示例：
+
+```ts
+service
+  .useBinding(7)           // 覆盖 bindingKey = default
+  .useBinding(44, 'app')   // 覆盖 bindingKey = "app"
+  .findAll({});
+```
+
+特点：
+
+- 覆盖值仅对当前一次方法调用有效
+- 不影响同一 service 的其他并发请求
+- 可与 BindingValue 合并
+- 可用于 request-scope provider 不存在时的替代方案
+
+---
+
+### 4. beforeSuper — Override 场景的并发安全机制（高级用法）
+
+如果你 override `findAll` / `update` / `delete` 并插入 `await`，  
+可能打乱绑定上下文的使用时序（因为 Service 是 singleton）。
+
+NICOT 提供 `beforeSuper` 方法，确保绑定上下文在 override 内不会被并发污染：
+
+```ts
+override async findAll(...args) {
+  await this.beforeSuper(async () => {
+    await doSomethingSlow();
+  });
+  return super.findAll(...args);
+}
+```
+
+机制：
+
+1. freeze 当前 binding 上下文
+2. 执行 override 的 async 逻辑
+3. restore binding
+4. 再交给 CrudBase 做正式的 CRUD 处理
+
+这是一个高级能力，不是普通用户需要接触的 API。
+
+---
+
+### 5. Request-scope Provider（推荐的绑定来源模式）
+
+推荐使用 NestJS 的 request-scope provider 自动提供绑定上下文。  
+绑定值自然来自当前 HTTP 请求：
+
+- userId 来自认证信息
+- appId 来自 header
+- tenantId 来自域名
+- ……
+
+#### 5.1 使用 `createProvider` 构造 request-scope binding provider
+
+```ts
+export const BindingContextProvider = createProvider(
+  {
+    provide: 'BindingContext',
+    scope: Scope.REQUEST,                 // ⭐ 每个请求一份独立上下文
+    inject: [REQUEST, AuthService] as const,
+  },
+  async (req, auth) => {
+    const user = await auth.getUserFromRequest(req);
+    return {
+      userId: user.id,
+      appId: Number(req.headers['x-app-id']),
+    };
+  },
+);
+```
+
+`createProvider` 会自动推断 `(req, auth)` 的类型。
+
+#### 5.2 在 Service 中注入 BindingContext
+
+```ts
+@Injectable()
+class ArticleService extends CrudService(Article) {
+  constructor(
+    @Inject('BindingContext')
+    private readonly ctx: { userId: number; appId: number },
+  ) {
+    super(repo);
+  }
+  
+  @BindingValue()
+  get currentUserId() {
+    return this.ctx.userId;
+  }
+  
+  @BindingValue('app')
+  get currentAppId() {
+    return this.ctx.appId;
+  }
+}
+```
+
+效果：
+
+- Service 仍然可以是 singleton
+- BindingValue 一律从 per-request binding context 读取
+- 完全并发安全
+
+这是 NICOT 官方推荐的绑定方式。
+
+---
+
+### 6. Binding 工作流程（流程概览）
+
+1. 用户调用 Service（可能使用 `useBinding` 覆盖）
+2. CrudBase pre-phase：收集所有 BindingValue
+3. 合并 request-scope provider / useBinding / 默认值
+4. 构造 PartialEntity（绑定字段 → 绑定值）
+5. create：强制写入字段
+6. findAll/update/delete：自动注入 WHERE 条件
+7. 执行实体生命周期钩子
+8. 返回经过 ResultDTO 剪裁的结果
+
+Binding 系统与 NICOT 的 CRUD 生命周期保持一致，也可自由组合和继承。
+
+---
+
+### 小结
+
+Binding 系统提供了：
+
+- `@BindingColumn`：声明需要绑定的字段
+- `@BindingValue`：绑定值的来源
+- `useBinding`：单次调用级覆盖
+- `beforeSuper`：override 时保证并发安全
+- request-scope provider：推荐的绑定上下文提供方式，彻底避免并发污染
+
+这套机制让 NICOT 在保持自动化 CRUD 的同时，也能优雅支持多租户隔离、权限隔离与上下文驱动业务逻辑。
+
+
+
+---
+
 ## Relations 与 @RelationComputed
 
 NICOT 的关系配置出现在两个层面，各自含义不同：

@@ -75,10 +75,66 @@ class SlowArticleService extends ArticleService {
   }
 }
 
+@Entity()
+class BindingValueEntity extends IdBase() {
+  @BindingColumn('prop')
+  @IntColumn('int', { unsigned: true })
+  propUserId: number;
+
+  @BindingColumn('getter')
+  @IntColumn('int', { unsigned: true })
+  getterUserId: number;
+
+  @BindingColumn('method')
+  @IntColumn('int', { unsigned: true })
+  methodUserId: number;
+
+  @BindingColumn('async')
+  @IntColumn('int', { unsigned: true })
+  asyncUserId: number;
+}
+
+@Injectable()
+class BindingValueCasesService extends CrudService(BindingValueEntity) {
+  // 1. property
+  @BindingValue('prop')
+  propUserIdValue = 1;
+
+  // 2. getter（accessor）
+  private _getterUserIdValue = 2;
+
+  @BindingValue('getter')
+  get getterUserIdValue() {
+    return this._getterUserIdValue;
+  }
+
+  // 3. method
+  private _methodUserIdValue = 3;
+
+  @BindingValue('method')
+  methodUserIdValue() {
+    return this._methodUserIdValue;
+  }
+
+  // 4. async method
+  private _asyncUserIdValue = 4;
+
+  @BindingValue('async')
+  async asyncUserIdValue() {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return this._asyncUserIdValue;
+  }
+
+  constructor(@InjectRepository(BindingValueEntity) repo) {
+    super(repo);
+  }
+}
+
 describe('binding', () => {
   let app: NestExpressApplication;
   let articleService: ArticleService;
   let slowArticleService: SlowArticleService;
+  let bindingValueCasesService: BindingValueCasesService;
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
@@ -96,9 +152,9 @@ describe('binding', () => {
           database: 'postgres',
           logging: false,
         }),
-        TypeOrmModule.forFeature([Article]),
+        TypeOrmModule.forFeature([Article, BindingValueEntity]),
       ],
-      providers: [ArticleService, SlowArticleService],
+      providers: [ArticleService, SlowArticleService, BindingValueCasesService],
     }).compile();
 
     app = module.createNestApplication<NestExpressApplication>();
@@ -106,6 +162,7 @@ describe('binding', () => {
 
     articleService = app.get(ArticleService);
     slowArticleService = app.get(SlowArticleService);
+    bindingValueCasesService = app.get(BindingValueCasesService);
   });
 
   afterAll(async () => {
@@ -298,5 +355,25 @@ describe('binding', () => {
 
   it('useBinding should isolate concurrent calls (slowArticleService)', async () => {
     await testConcurrentIsolation(slowArticleService);
+  });
+
+  it('BindingValue should support property / getter / method / async method', async () => {
+    // 通过 create 触发 BindingValue 采集与 BindingColumn 写入
+    const created = await bindingValueCasesService.create({} as any);
+
+    expect(created.data.propUserId).toBe(1);
+    expect(created.data.getterUserId).toBe(2);
+    expect(created.data.methodUserId).toBe(3);
+    expect(created.data.asyncUserId).toBe(4);
+
+    // 再查一遍，验证 findAll 时的 binding 也正常工作
+    const result = await bindingValueCasesService.findAll({});
+    expect(result.data).toHaveLength(1);
+
+    const row = result.data[0];
+    expect(row.propUserId).toBe(1);
+    expect(row.getterUserId).toBe(2);
+    expect(row.methodUserId).toBe(3);
+    expect(row.asyncUserId).toBe(4);
   });
 });

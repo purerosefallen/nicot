@@ -15,7 +15,8 @@ export const BindingColumn = (
 export const BindingValue =
   (bindingKey = DefaultBindingKey): PropertyDecorator & MethodDecorator =>
   (obj: any, key: string, des?: TypedPropertyDescriptor<any>) => {
-    const isMethod = !!des;
+    const isMethod = !!des && typeof des.value === 'function';
+
     Metadata.set(
       'bindingValue',
       { bindingKey, isMethod },
