@@ -550,6 +550,264 @@ Recommended:
 
 ---
 
+## Binding Context (Data Binding & Multi-Tenant Isolation)
+
+In real systems, you often need to isolate data by *context*:
+
+- current user
+- current tenant / app
+- current organization / project
+
+Typical rules:
+
+- A user can only see their own rows.
+- Updates/deletes must be scoped by ownership.
+- You don’t want to copy-paste `qb.andWhere('userId = :id', ...)` everywhere.
+
+NICOT provides **BindingColumn / BindingValue / useBinding / beforeSuper** on top of `CrudBase` so that
+*multi-tenant isolation* becomes part of the **entity contract**, not scattered per-controller logic.
+
+---
+
+### BindingColumn — declare “this field must be bound”
+
+Use `@BindingColumn` on entity fields that should be filled and filtered by the backend context,
+instead of coming from the client payload.
+
+```ts
+@Entity()
+export class Article extends IdBase() {
+  @BindingColumn()        // default bindingKey: "default"
+  @IntColumn('int', { unsigned: true })
+  userId: number;
+  
+  @BindingColumn('app')   // bindingKey: "app"
+  @IntColumn('int', { unsigned: true })
+  appId: number;
+}
+```
+
+NICOT will:
+
+- on `create`:
+  - write binding values into `userId` / `appId` (if provided)
+- on `findAll`:
+  - automatically add `WHERE userId = :value` / `appId = :value`
+- on `update` / `delete`:
+  - add the same binding conditions, preventing cross-tenant access
+
+Effectively: **binding columns are your “ownership / tenant” fields**.
+
+---
+
+### BindingValue — where the binding values come from
+
+`@BindingValue` is placed on service properties or methods that provide the actual binding values.
+
+```ts
+@Injectable()
+class ArticleService extends CrudService(Article) {
+  constructor(@InjectRepository(Article) repo: Repository<Article>) {
+    super(repo);
+  }
+  
+  @BindingValue() // for BindingColumn()
+  get currentUserId() {
+    return this.ctx.userId;
+  }
+  
+  @BindingValue('app') // for BindingColumn('app')
+  get currentAppId() {
+    return this.ctx.appId;
+  }
+}
+```
+
+At runtime, NICOT will:
+
+- collect all `BindingValue` metadata
+- build a partial entity `{ userId, appId, ... }`
+- use it to:
+  - fill fields on `create`
+  - add `WHERE` conditions on `findAll`, `update`, `delete`
+
+If both client payload and BindingValue provide a value, **BindingValue wins** for binding columns.
+
+> You can use:
+> - properties (sync)
+> - getters
+> - methods (sync)
+> - async methods  
+    > NICOT will await async BindingValues when necessary.
+
+---
+
+### Request-scoped context provider (recommended)
+
+The “canonical” way to provide binding values in a web app is:
+
+1. Extract context (user, app, tenant, etc.) from the incoming request.
+2. Put it into a **request-scoped provider**.
+3. Have `@BindingValue` simply read from that provider.
+
+This keeps:
+
+- context lifetime = request lifetime
+- services as singletons
+- binding logic centralized and testable
+
+#### 1) Define a request-scoped binding context
+
+Using `createProvider` from **nesties**, you can declare a strongly-typed request-scoped provider:
+
+```ts
+export const BindingContextProvider = createProvider(
+  {
+    provide: 'BindingContext',
+    scope: Scope.REQUEST,                 // ⭐ one instance per HTTP request
+    inject: [REQUEST, AuthService] as const,
+  },
+  async (req, auth) => {
+    const user = await auth.getUserFromRequest(req);
+    return {
+      userId: user.id,
+      appId: Number(req.headers['x-app-id']),
+    };
+  },
+);
+```
+
+Key points:
+
+- `scope: Scope.REQUEST` → each request has its own context instance.
+- `inject: [REQUEST, AuthService]` → you can pull anything you need to compute bindings.
+- `createProvider` infers `(req, auth)` types automatically.
+
+#### 2) Inject the context into your service and expose BindingValues
+
+```ts
+@Injectable()
+class ArticleService extends CrudService(Article) {
+  constructor(
+    @InjectRepository(Article) repo: Repository<Article>,
+    @Inject('BindingContext')
+    private readonly ctx: { userId: number; appId: number },
+  ) {
+    super(repo);
+  }
+  
+  @BindingValue()
+  get currentUserId() {
+    return this.ctx.userId;
+  }
+  
+  @BindingValue('app')
+  get currentAppId() {
+    return this.ctx.appId;
+  }
+}
+```
+
+With this setup:
+
+- each request gets its own `{ userId, appId }` context
+- `@BindingValue` simply reads from that context
+- `CrudBase` applies bindings for create / findAll / update / delete automatically
+- controllers do **not** need to repeat `userId` conditions
+
+This is the **recommended** way to use binding in a NestJS HTTP app.
+
+---
+
+### useBinding — override binding per call
+
+For tests, scripts, or some internal flows, you may want to override binding values *per call*
+instead of relying on `@BindingValue`.
+
+Use `useBinding` for this:
+
+```ts
+// create with explicit binding
+const res = await articleService
+  .useBinding(7)           // bindingKey: "default"
+  .useBinding(44, 'app')   // bindingKey: "app"
+  .create({ name: 'Article 1' });
+
+// query in the same binding scope
+const list = await articleService
+  .useBinding(7)
+  .useBinding(44, 'app')
+  .findAll({});
+```
+
+Key properties:
+
+- override is **per call**, not global
+- multiple concurrent calls with different `useBinding` values are isolated
+- merges with `@BindingValue` (explicit `useBinding` can override default BindingValue)
+
+This is particularly handy in unit tests and CLI scripts.
+
+---
+
+### beforeSuper — safe overrides with async logic (advanced)
+
+`CrudService` subclasses are singletons, but bindings are *per call*.
+
+If you override `findAll` / `update` / `delete` and add `await` **before** calling `super`,
+you can accidentally mess with binding order / concurrency.
+
+NICOT offers `beforeSuper` as a small helper:
+
+```ts
+@Injectable()
+class SlowArticleService extends ArticleService {
+  override async findAll(
+    ...args: Parameters<typeof ArticleService.prototype.findAll>
+  ) {
+    await this.beforeSuper(async () => {
+      // any async work before delegating to CrudBase
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    return super.findAll(...args);
+  }
+}
+```
+
+What `beforeSuper` ensures:
+
+1. capture (freeze) current binding state
+2. run your async pre-logic
+3. restore binding state
+4. continue into `CrudBase` with the correct bindings
+
+This is an **advanced** hook; most users don’t need it. For typical per-request isolation, prefer request-scoped context + `@BindingValue`.
+
+---
+
+### How Binding works inside CrudBase
+
+On each CRUD operation, NICOT does roughly:
+
+1. collect `BindingValue` from the service (properties / getters / methods / async methods)
+2. merge with `useBinding(...)` overlays
+3. build a “binding partial entity”
+4. apply it to:
+  - `create`: force binding fields
+  - `findAll` / `update` / `delete`: add binding-based `WHERE` conditions
+5. continue with:
+  - `beforeGet` / `beforeUpdate` / `beforeCreate`
+  - query decorators (`@QueryXXX`)
+  - pagination
+  - relations
+
+You can think of Binding as **“automatic ownership filters”** configured declaratively on:
+
+- entities (`@BindingColumn`)
+- services (`@BindingValue`, `useBinding`, `beforeSuper`, request-scoped context)
+
+---
+
 ## Pagination
 
 ### Offset pagination (default)
