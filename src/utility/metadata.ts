@@ -3,6 +3,7 @@ import { QueryCond } from '../bases';
 import { AnyClass } from 'nesties';
 import { QueryFullTextColumnOptions } from './query-full-text-column-options.interface';
 import { GetMutatorOptions } from '../decorators/get-mutator';
+import { BindingValueMetadata } from '../decorators/binding';
 
 interface SpecificFields {
   notColumn: { keepInCreate?: boolean };
@@ -18,6 +19,8 @@ interface SpecificFields {
   queryCondition: QueryCond;
   requireGetMutator: boolean;
   getMutator: GetMutatorOptions;
+  bindingColumn: string;
+  bindingValue: BindingValueMetadata;
 }
 
 type MetadataMap = SpecificFields;

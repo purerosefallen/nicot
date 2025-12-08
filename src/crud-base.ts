@@ -27,14 +27,20 @@ import {
   PaginatedReturnMessageDto,
   ReturnMessageDto,
 } from 'nesties';
-import { getNotInResultFields, reflector } from './utility/metadata';
+import {
+  getNotInResultFields,
+  getSpecificFields,
+  reflector,
+} from './utility/metadata';
 import { getTypeormRelations } from './utility/get-typeorm-relations';
 import { getPaginatedResult } from './utility/cursor-pagination-utils';
 import PQueue from 'p-queue';
 import { RelationDef } from './utility/relation-def';
 import { filterRelations } from './utility/filter-relations';
+import { BindingValueMetadata, DefaultBindingKey } from './decorators';
 
 export type EntityId<T extends { id: any }> = T['id'];
+type BindingSnapshot = Record<string, any>;
 
 export const Relation = (
   name: string,
@@ -94,6 +100,8 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     public crudOptions: CrudOptions<T>,
   ) {}
 
+  // cleaning entities
+
   _cleanEntityNotInResultFields(ent: T): T {
     const visited = new Set();
     const runSingleObject = (o: any, cl) => {
@@ -138,6 +146,123 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     } else {
       return this._cleanEntityNotInResultFields(ents as T) as E;
     }
+  }
+
+  // binding things
+
+  readonly _tmpBindingMap = new Map<string, any>();
+  readonly _bindingCache = new Map<
+    string,
+    BindingValueMetadata & { field: string }
+  >();
+
+  _lookForBindingValueField(bindingKey: string) {
+    if (this._bindingCache.has(bindingKey)) {
+      return this._bindingCache.get(bindingKey);
+    }
+    const bindingServiceFields = getSpecificFields(this, 'bindingValue');
+    const useField = bindingServiceFields.find((f) => {
+      const meta = reflector.get('bindingValue', this, f);
+      return meta?.bindingKey === bindingKey;
+    });
+    if (useField) {
+      const meta = reflector.get('bindingValue', this, useField);
+      const res = {
+        ...meta,
+        field: useField,
+      };
+      this._bindingCache.set(bindingKey, res);
+      return res;
+    }
+    return undefined;
+  }
+
+  _resolveBindingValue<K extends keyof T>(
+    entityField: K,
+  ): T[K] | Promise<T[K]> {
+    const bindingKey = reflector.get(
+      'bindingColumn',
+      this.entityClass,
+      entityField as string,
+    );
+    if (!bindingKey) {
+      return undefined;
+    }
+    if (this._tmpBindingMap.has(bindingKey)) {
+      return this._tmpBindingMap.get(bindingKey);
+    }
+    const bindingValueField = this._lookForBindingValueField(bindingKey);
+    if (!bindingValueField) {
+      return undefined;
+    }
+    if (bindingValueField.isMethod) {
+      return (this as any)[bindingValueField.field]();
+    } else {
+      return (this as any)[bindingValueField.field];
+    }
+  }
+
+  // MUST be called 1st on every CRUD operation
+  async getBindingPartialEntity(): Promise<Partial<T>> {
+    const bindingFields = getSpecificFields(this.entityClass, 'bindingColumn');
+    if (!bindingFields.length) {
+      return {};
+    }
+    const values = bindingFields.map((field, i) => {
+      return {
+        field,
+        value: this._resolveBindingValue(field),
+        i,
+      };
+    });
+    this._tmpBindingMap.clear();
+    const containingPromiseValues = values.filter(
+      (v) => v.value instanceof Promise,
+    );
+    if (containingPromiseValues.length) {
+      await Promise.all(
+        containingPromiseValues.map(async (v) => {
+          v.value = await v.value;
+        }),
+      );
+    }
+    // now it's all resolved
+    const res: Partial<T> = {};
+    for (const v of values) {
+      if (v.value != null) {
+        (res as any)[v.field] = v.value;
+      }
+    }
+    return res;
+  }
+
+  useBinding(value: any, bindngKey = DefaultBindingKey): this {
+    this._tmpBindingMap.set(bindngKey, value);
+    return this;
+  }
+
+  _freezeBindings(): BindingSnapshot {
+    const res: Record<string, any> = {};
+    for (const [key, value] of this._tmpBindingMap.entries()) {
+      res[key] = value;
+    }
+    this._tmpBindingMap.clear();
+    return res;
+  }
+
+  _restoreBindings(frozen: BindingSnapshot): this {
+    this._tmpBindingMap.clear();
+    for (const key of Object.keys(frozen)) {
+      this._tmpBindingMap.set(key, frozen[key]);
+    }
+    return this;
+  }
+
+  async beforeSuper<R>(fn: () => Promise<R>): Promise<R> {
+    const snap = this._freezeBindings();
+    const res = await fn();
+    this._restoreBindings(snap);
+    return res;
   }
 
   async _batchCreate(
@@ -256,6 +381,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   }
 
   async create(_ent: T, beforeCreate?: (repo: Repository<T>) => Promise<void>) {
+    const bindingEnt = await this.getBindingPartialEntity();
     if (!_ent) {
       throw new BlankReturnMessageDto(400, 'Invalid entity').toException();
     }
@@ -292,6 +418,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
           }
         }
       }
+      Object.assign(ent, bindingEnt);
       if (beforeCreate) {
         await beforeCreate(repo);
       }
@@ -366,15 +493,26 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     return this.repo.createQueryBuilder(this.entityAliasName);
   }
 
+  _applyQueryFromBinding(bindingEnt: Partial<T>, qb: SelectQueryBuilder<T>) {
+    for (const [key, value] of Object.entries(bindingEnt)) {
+      const typeormKey = `_binding_${key}`;
+      qb.andWhere(`${this.entityAliasName}.${key} = :${typeormKey}`, {
+        [typeormKey]: value,
+      });
+    }
+  }
+
   async findOne(
     id: EntityId<T>,
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     extraQuery: (qb: SelectQueryBuilder<T>) => void = () => {},
   ) {
+    const bindingEnt = await this.getBindingPartialEntity();
     const query = this.queryBuilder()
       .where(`${this.entityAliasName}.id = :id`, { id })
       .take(1);
     this._applyQueryRelations(query);
+    this._applyQueryFromBinding(bindingEnt, query);
     this.extraGetQuery(query);
     extraQuery(query);
     query.take(1);
@@ -409,6 +547,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     extraQuery: (qb: SelectQueryBuilder<T>) => void = () => {},
   ) {
+    const bindingEnt = await this.getBindingPartialEntity();
     const query = this.queryBuilder().where('1 = 1');
     const newEnt = new this.entityClass();
     if (ent) {
@@ -418,6 +557,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     }
     this._applyQueryRelations(query);
     this._applyQueryFilters(query, newEnt);
+    this._applyQueryFromBinding(bindingEnt, query);
     const pageSettings =
       newEnt instanceof PageSettingsDto
         ? newEnt
@@ -491,6 +631,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     entPart: Partial<T>,
     cond: FindOptionsWhere<T> = {},
   ) {
+    const bindingEnt = await this.getBindingPartialEntity();
     let result: UpdateResult;
     const ent = new this.entityClass();
     Object.assign(ent, entPart);
@@ -503,6 +644,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       result = await this.repo.update(
         {
           id,
+          ...bindingEnt,
           ...cond,
         },
         ent,
@@ -525,9 +667,11 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   }
 
   async delete(id: EntityId<T>, cond: FindOptionsWhere<T> = {}) {
+    const bindingEnt = await this.getBindingPartialEntity();
     let result: UpdateResult | DeleteResult;
     const searchCond = {
       id,
+      ...bindingEnt,
       ...cond,
     };
     try {
@@ -553,6 +697,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     _ents: T[],
     extraChecking?: (ent: T) => string | Promise<string>,
   ) {
+    const bindingEnt = await this.getBindingPartialEntity();
     const ents = _ents.map((ent) => {
       const newEnt = new this.entityClass();
       Object.assign(
@@ -580,6 +725,9 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     const remainingEnts = ents.filter(
       (ent) => !invalidResults.find((result) => result.entry === ent),
     );
+    for (const ent of remainingEnts) {
+      Object.assign(ent, bindingEnt);
+    }
     await Promise.all(remainingEnts.map((ent) => ent.beforeCreate?.()));
     const data = await this._batchCreate(remainingEnts, undefined, true);
     await Promise.all(data.results.map((e) => e.afterCreate?.()));
@@ -601,7 +749,11 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   }
 
   async exists(id: EntityId<T>): Promise<boolean> {
-    const ent = await this.repo.findOne({ where: { id }, select: ['id'] });
+    const bindingEnt = await this.getBindingPartialEntity();
+    const ent = await this.repo.findOne({
+      where: { id, ...bindingEnt },
+      select: ['id'],
+    });
     return !!ent;
   }
 

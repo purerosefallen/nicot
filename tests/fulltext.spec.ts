@@ -41,7 +41,6 @@ describe('dummy2', () => {
   });
 });
 
-/*
 describe('fulltext', () => {
   let app: NestExpressApplication;
 
@@ -278,4 +277,3 @@ describe('fulltext', () => {
     expect(prevPage.nextCursor).toBe(result.nextCursor);
   });
 });
-*/
