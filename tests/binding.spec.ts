@@ -376,4 +376,201 @@ describe('binding', () => {
     expect(row.methodUserId).toBe(3);
     expect(row.asyncUserId).toBe(4);
   });
+
+  it('operation should persist changes done through proxy', async () => {
+    // 准备一条绑定到 userId=7, appId=44 的记录
+    articleService.setTestAppId(44);
+    articleService.setTestUserId(7);
+
+    const created = await articleService.create({
+      name: 'Original Name',
+    } as Article);
+
+    const id = created.data.id;
+
+    // 用 operation 改 name，cb 里直接改 entProxy
+    const opRes = await articleService.operation<string>(
+      id,
+      async (ent, { repo, flush }) => {
+        expect(ent.name).toBe('Original Name');
+
+        ent.name = 'Updated Name via operation';
+
+        // 中途再改一个字段，后面会统一 flush
+        ent.name = 'Updated Name via operation (2nd)';
+
+        // 手动 flush 一次，也可以不 flush，让最后的 flush 帮你刷
+        await flush();
+
+        return ent.name;
+      },
+    );
+
+    expect(opRes.data).toBe('Updated Name via operation (2nd)');
+
+    // 再查一遍，确认 DB 里的值变了
+    const query = await articleService.findAll({});
+    expect(query.data).toHaveLength(1);
+    expect(query.data[0].id).toBe(id);
+    expect(query.data[0].name).toBe('Updated Name via operation (2nd)');
+  });
+
+  it('operation should not change DB when value is set back to initial', async () => {
+    articleService.setTestAppId(44);
+    articleService.setTestUserId(7);
+
+    const created = await articleService.create({
+      name: 'Keep Me',
+    } as Article);
+
+    const id = created.data.id;
+
+    await articleService.operation<void>(id, async (ent, { flush }) => {
+      expect(ent.name).toBe('Keep Me');
+
+      ent.name = 'Temp';
+      ent.name = 'Keep Me'; // 改回初始值
+      await flush();
+    });
+
+    const query = await articleService.findAll({});
+    expect(query.data).toHaveLength(1);
+
+    const row = query.data[0];
+    expect(row.id).toBe(id);
+    expect(row.name).toBe('Keep Me');
+  });
+
+  it('operation should translate delete property into NULL in DB', async () => {
+    articleService.setTestAppId(44);
+    articleService.setTestUserId(7);
+
+    const created = await articleService.create({
+      name: 'To be nulled',
+    } as Article);
+
+    const id = created.data.id;
+
+    await articleService.operation<void>(id, async (ent, { flush }) => {
+      expect(ent.name).toBe('To be nulled');
+
+      delete (ent as any).name; // 触发 observeDiff 的 delete 分支
+      await flush();
+    });
+
+    const repo = articleService.repo;
+    const raw = await repo.findOne({ where: { id } });
+
+    // DB 层应为 null（或者 undefined，看你 column 定义）
+    // 如果 StringColumn 默认允许 NULL，那这里应为 null
+    expect(raw!.name).toBeNull();
+  });
+
+  it('operation should respect BindingValue when updating', async () => {
+    // 先插一条“不属于当前 binding 用户”的记录
+    const foreign = await articleService.create({
+      name: 'Foreign Article',
+      appId: 1,
+      userId: 2,
+    } as Article);
+
+    // 再插一条属于当前 user/app 的记录
+    articleService.setTestAppId(44);
+    articleService.setTestUserId(7);
+
+    const owned = await articleService.create({
+      name: 'Owned Article',
+    } as Article);
+
+    // 用正确 binding 操作 owned，应该成功
+    await articleService.operation<void>(
+      owned.data.id,
+      async (ent, { flush }) => {
+        ent.name = 'Owned Article (Updated)';
+        await flush();
+      },
+    );
+
+    const ownedQuery = await articleService.findAll({});
+    expect(ownedQuery.data).toHaveLength(1);
+    expect(ownedQuery.data[0].name).toBe('Owned Article (Updated)');
+
+    // 换一个 binding，尝试操作 foreign，应该 404 / 抛错
+    articleService.setTestAppId(44);
+    articleService.setTestUserId(7);
+    await expect(
+      articleService.operation<void>(
+        foreign.data.id,
+        async (ent, { flush }) => {
+          ent.name = 'Should Not Update';
+          await flush();
+        },
+      ),
+    ).rejects.toThrow();
+  });
+
+  async function testOperationConcurrentIsolation(
+    service: ArticleService | SlowArticleService,
+  ) {
+    const repo = service.repo;
+
+    // 直接写两条不同 binding 的数据
+    const a1 = await repo.save(
+      Object.assign(new Article(), {
+        name: 'Article U7 A44',
+        userId: 7,
+        appId: 44,
+      }),
+    );
+
+    const a2 = await repo.save(
+      Object.assign(new Article(), {
+        name: 'Article U8 A45',
+        userId: 8,
+        appId: 45,
+      }),
+    );
+
+    // 并发两个 operation，各自设置对应的 BindingValue
+    const [_, __] = await Promise.all([
+      service
+        .useBinding(7)
+        .useBinding(44, 'app')
+        .operation<void>(a1.id, async (ent, { flush }) => {
+          ent.name = 'Article U7 A44 (updated)';
+          await flush();
+        }),
+
+      service
+        .useBinding(8)
+        .useBinding(45, 'app')
+        .operation<void>(a2.id, async (ent, { flush }) => {
+          ent.name = 'Article U8 A45 (updated)';
+          await flush();
+        }),
+    ]);
+
+    // 检查最终 DB 状态
+    const rows = await repo.find({ order: { id: 'ASC' } });
+    expect(rows).toHaveLength(2);
+
+    const row1 = rows.find((r) => r.id === a1.id)!;
+    const row2 = rows.find((r) => r.id === a2.id)!;
+
+    expect(row1.userId).toBe(7);
+    expect(row1.appId).toBe(44);
+    expect(row1.name).toBe('Article U7 A44 (updated)');
+
+    expect(row2.userId).toBe(8);
+    expect(row2.appId).toBe(45);
+    expect(row2.name).toBe('Article U8 A45 (updated)');
+  }
+
+  it('operation should isolate concurrent calls (articleService)', async () => {
+    await testOperationConcurrentIsolation(articleService);
+  });
+
+  it('operation should isolate concurrent calls (slowArticleService)', async () => {
+    await testOperationConcurrentIsolation(slowArticleService);
+  });
 });

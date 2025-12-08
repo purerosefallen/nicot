@@ -6,6 +6,7 @@ import {
 import {
   DeepPartial,
   DeleteResult,
+  FindOneOptions,
   FindOptionsWhere,
   In,
   Repository,
@@ -22,8 +23,10 @@ import { ConsoleLogger } from '@nestjs/common';
 import { camelCase } from 'typeorm/util/StringUtils';
 import _, { omit } from 'lodash';
 import {
+  Awaitable,
   BlankReturnMessageDto,
   ClassType,
+  GenericReturnMessageDto,
   PaginatedReturnMessageDto,
   ReturnMessageDto,
 } from 'nesties';
@@ -38,6 +41,7 @@ import PQueue from 'p-queue';
 import { RelationDef } from './utility/relation-def';
 import { filterRelations } from './utility/filter-relations';
 import { BindingValueMetadata, DefaultBindingKey } from './decorators';
+import { observeDiff } from './utility/observe-diff';
 
 export type EntityId<T extends { id: any }> = T['id'];
 type BindingSnapshot = Record<string, any>;
@@ -748,13 +752,86 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     );
   }
 
-  async exists(id: EntityId<T>): Promise<boolean> {
+  async exists(
+    id: EntityId<T>,
+    cond: FindOptionsWhere<T> = {},
+  ): Promise<boolean> {
     const bindingEnt = await this.getBindingPartialEntity();
-    const ent = await this.repo.findOne({
-      where: { id, ...bindingEnt },
-      select: ['id'],
+    return this.repo.exists({
+      where: { id, ...bindingEnt, ...cond },
     });
-    return !!ent;
+  }
+
+  async operation<R>(
+    id: EntityId<T>,
+    cb: (
+      ent: T,
+      ctx: {
+        repo: Repository<T>;
+        flush: () => Promise<void>;
+      },
+    ) => Awaitable<R>,
+    extraOptions: FindOneOptions<T> = {},
+  ): Promise<GenericReturnMessageDto<R>> {
+    const bindingEnt = await this.getBindingPartialEntity();
+    const where: FindOptionsWhere<T> = {
+      id,
+      ...bindingEnt,
+      ...(extraOptions.where || {}),
+    };
+    const throw404 = () => {
+      throw new BlankReturnMessageDto(
+        404,
+        `${this.entityName} ID ${id} not found.`,
+      ).toException();
+    };
+    if (!(await this.repo.exists({ where }))) {
+      throw404();
+    }
+    const res = await this.repo.manager.transaction(async (tdb) => {
+      const repo = tdb.getRepository(this.entityClass);
+      const ent = await repo.findOne({
+        lock: { mode: 'pessimistic_write' },
+        ...extraOptions,
+        where,
+      });
+      if (!ent) {
+        throw404();
+      }
+      const initial = { ...ent };
+      let changes: Partial<T> = {};
+      const entProxy = observeDiff(ent, (change) => {
+        if (change.type === 'delete') {
+          if (initial[change.key] === null) {
+            delete changes[change.key];
+          } else {
+            changes[change.key] = null;
+          }
+        } else {
+          if (change.newValue !== initial[change.key]) {
+            changes[change.key] = change.newValue;
+          } else {
+            delete changes[change.key];
+          }
+        }
+      });
+      const flush = async () => {
+        if (Object.keys(changes).length) {
+          const currentChanges = { ...changes };
+          Object.assign(initial, changes);
+          changes = {};
+          await repo.update({ id }, currentChanges);
+        }
+      };
+      const result = await cb(entProxy, { repo, flush });
+      await flush();
+      return result;
+    });
+    if (res == null) {
+      return new BlankReturnMessageDto(200, 'success');
+    } else {
+      return new GenericReturnMessageDto(200, 'success', res);
+    }
   }
 
   async _loadFullTextIndex() {

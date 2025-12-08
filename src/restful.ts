@@ -12,19 +12,18 @@ import {
 import { ImportDataDto, ImportEntryDto } from './dto';
 import {
   AnyClass,
-  BlankReturnMessageDto,
   MergeMethodDecorators,
   PaginatedReturnMessageDto,
   ReturnMessageDto,
   ClassType,
   getApiProperty,
   DataPipe,
+  ApiTypeResponse,
+  ApiBlankResponse,
+  ApiError,
 } from 'nesties';
 import {
-  ApiBadRequestResponse,
   ApiBody,
-  ApiInternalServerErrorResponse,
-  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
@@ -538,10 +537,7 @@ export class RestfulFactory<
       }),
       ApiBody({ type: this.createDto }),
       ApiOkResponse({ type: this.entityCreateReturnMessageDto }),
-      ApiBadRequestResponse({
-        type: BlankReturnMessageDto,
-        description: `The ${this.entityClassName} is not valid`,
-      }),
+      ApiError(400, `The ${this.entityClassName} is not valid`),
     ]);
   }
 
@@ -558,10 +554,10 @@ export class RestfulFactory<
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiOkResponse({ type: this.entityReturnMessageDto }),
-      ApiNotFoundResponse({
-        type: BlankReturnMessageDto,
-        description: `The ${this.entityClassName} with the given id was not found`,
-      }),
+      ApiError(
+        400,
+        `The ${this.entityClassName} with the given id was not found`,
+      ),
     ]);
   }
 
@@ -625,19 +621,13 @@ export class RestfulFactory<
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiBody({ type: this.updateDto }),
-      ApiOkResponse({ type: BlankReturnMessageDto }),
-      ApiNotFoundResponse({
-        type: BlankReturnMessageDto,
-        description: `The ${this.entityClassName} with the given id was not found`,
-      }),
-      ApiBadRequestResponse({
-        type: BlankReturnMessageDto,
-        description: `The ${this.entityClassName} is not valid`,
-      }),
-      ApiInternalServerErrorResponse({
-        type: BlankReturnMessageDto,
-        description: 'Internal error',
-      }),
+      ApiBlankResponse(),
+      ApiError(
+        404,
+        `The ${this.entityClassName} with the given id was not found`,
+      ),
+      ApiError(400, `The ${this.entityClassName} is not valid`),
+      ApiError(500, 'Internal error'),
     ]);
   }
 
@@ -654,21 +644,18 @@ export class RestfulFactory<
         ...extras,
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
-      ApiOkResponse({ type: BlankReturnMessageDto }),
-      ApiNotFoundResponse({
-        type: BlankReturnMessageDto,
-        description: `The ${this.entityClassName} with the given id was not found`,
-      }),
-      ApiInternalServerErrorResponse({
-        type: BlankReturnMessageDto,
-        description: 'Internal error',
-      }),
+      ApiBlankResponse(),
+      ApiError(
+        404,
+        `The ${this.entityClassName} with the given id was not found`,
+      ),
+      ApiError(500, 'Internal error'),
     ]);
   }
 
   import(extras: Partial<OperationObject> = {}): MethodDecorator {
     return MergeMethodDecorators([
-      Post('import'),
+      this.usePrefix(Post, 'import'),
       HttpCode(200),
       ApiOperation({
         summary: `Import ${this.entityClassName}`,
@@ -676,10 +663,31 @@ export class RestfulFactory<
       }),
       ApiBody({ type: this.importDto }),
       ApiOkResponse({ type: this.importReturnMessageDto }),
-      ApiInternalServerErrorResponse({
-        type: BlankReturnMessageDto,
-        description: 'Internal error',
+      ApiError(500, 'Internal error'),
+    ]);
+  }
+
+  operation(
+    operationName: string,
+    options: {
+      returnType?: AnyClass;
+      operationExtras?: Partial<OperationObject>;
+    } = {},
+  ): MethodDecorator {
+    return MergeMethodDecorators([
+      this.usePrefix(Post, `:id/${operationName}`),
+      HttpCode(200),
+      ApiOperation({
+        summary: `${upperFirst(operationName)} a ${this.entityClassName} by id`,
+        ...(options.operationExtras || {}),
       }),
+      options.returnType
+        ? ApiTypeResponse(options.returnType)
+        : ApiBlankResponse(),
+      ApiError(
+        404,
+        `The ${this.entityClassName} with the given id was not found`,
+      ),
     ]);
   }
 
