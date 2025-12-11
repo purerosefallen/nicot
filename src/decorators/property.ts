@@ -31,7 +31,12 @@ import {
   TypeTransformer,
   TypeTransformerString,
 } from '../utility/type-transformer';
-import { NotInResult, NotWritable } from './access';
+import {
+  NotChangeable,
+  NotInResult,
+  NotQueryable,
+  NotWritable,
+} from './access';
 import { parseBool } from '../utility/parse-bool';
 import { ColumnUnsignedOptions } from 'typeorm/decorator/options/ColumnUnsignedOptions';
 import { GetMutatorBool, RequireGetMutator } from './get-mutator';
@@ -375,6 +380,12 @@ export const QueryColumn = (
       ...options,
     }),
   ]);
+
+export const InternalColumn = () =>
+  MergePropertyDecorators([NotQueryable(), NotWritable(), NotInResult()]);
+
+export const CreateOnlyColumn = () =>
+  MergePropertyDecorators([NotQueryable(), NotChangeable(), NotInResult()]);
 
 export const RelationComputed =
   (type?: () => AnyClass): PropertyDecorator =>

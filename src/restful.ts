@@ -56,8 +56,8 @@ import { OmitTypeExclude, PickTypeExpose } from './utility/omit-type-exclude';
 import { nonTransformableTypes } from './utility/non-transformable-types';
 import { PatchColumnsInGet } from './utility/patch-column-in-get';
 import { OmitPipe, OptionalDataPipe, PickPipe } from './decorators';
-import { Memorize } from './utility/memorize';
 import { MutatorPipe } from './utility/mutate-pipe';
+import { Memorize } from 'nfkit';
 
 export interface RestfulFactoryOptions<
   T,
@@ -88,6 +88,10 @@ const getNextLevelRelations = (relations: string[], enteringField: string) =>
   relations
     .filter((r) => r.includes('.') && r.startsWith(`${enteringField}.`))
     .map((r) => r.split('.').slice(1).join('.'));
+
+export interface ResourceOptions extends Partial<OperationObject> {
+  prefix?: string;
+}
 
 export class RestfulFactory<
   T extends { id: any },
@@ -510,30 +514,25 @@ export class RestfulFactory<
 
   private usePrefix(
     methodDec: (path?: string) => MethodDecorator,
-    path?: string,
+    ...paths: string[]
   ) {
-    if (path) {
-      if (this.options.prefix) {
-        return methodDec(`${this.options.prefix}/${path}`);
-      } else {
-        return methodDec(path);
-      }
+    const usePaths = [this.options.prefix, ...paths].filter(
+      (s) => s && s.length > 0,
+    );
+    if (usePaths.length > 0) {
+      return methodDec(usePaths.join('/'));
     } else {
-      if (this.options.prefix) {
-        return methodDec(this.options.prefix);
-      } else {
-        return methodDec();
-      }
+      return methodDec();
     }
   }
 
-  create(extras: Partial<OperationObject> = {}): MethodDecorator {
+  create(extras: ResourceOptions = {}): MethodDecorator {
     return MergeMethodDecorators([
-      this.usePrefix(Post),
+      this.usePrefix(Post, extras.prefix),
       HttpCode(200),
       ApiOperation({
         summary: `Create a new ${this.entityClassName}`,
-        ...extras,
+        ..._.omit(extras, 'prefix'),
       }),
       ApiBody({ type: this.createDto }),
       ApiOkResponse({ type: this.entityCreateReturnMessageDto }),
@@ -545,12 +544,12 @@ export class RestfulFactory<
     return Body(DataPipe(), OmitPipe(this.fieldsInCreateToOmit));
   }
 
-  findOne(extras: Partial<OperationObject> = {}): MethodDecorator {
+  findOne(extras: ResourceOptions = {}): MethodDecorator {
     return MergeMethodDecorators([
-      this.usePrefix(Get, ':id'),
+      this.usePrefix(Get, extras.prefix, ':id'),
       ApiOperation({
         summary: `Find a ${this.entityClassName} by id`,
-        ...extras,
+        ..._.omit(extras, 'prefix'),
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiOkResponse({ type: this.entityReturnMessageDto }),
@@ -569,25 +568,23 @@ export class RestfulFactory<
     }
   }
 
-  findAll(extras: Partial<OperationObject> = {}): MethodDecorator {
+  findAll(extras: ResourceOptions = {}): MethodDecorator {
     return MergeMethodDecorators([
-      this.usePrefix(Get),
+      this.usePrefix(Get, extras.prefix),
       ApiOperation({
         summary: `Find all ${this.entityClassName}`,
-        ...extras,
+        ..._.omit(extras, 'prefix'),
       }),
       ApiOkResponse({ type: this.entityArrayReturnMessageDto }),
     ]);
   }
 
-  findAllCursorPaginated(
-    extras: Partial<OperationObject> = {},
-  ): MethodDecorator {
+  findAllCursorPaginated(extras: ResourceOptions = {}): MethodDecorator {
     return MergeMethodDecorators([
-      this.usePrefix(Get),
+      this.usePrefix(Get, extras.prefix),
       ApiOperation({
         summary: `Find all ${this.entityClassName}`,
-        ...extras,
+        ..._.omit(extras, 'prefix'),
       }),
       ApiOkResponse({ type: this.entityCursorPaginationReturnMessageDto }),
     ]);
@@ -611,13 +608,13 @@ export class RestfulFactory<
     }
   }
 
-  update(extras: Partial<OperationObject> = {}): MethodDecorator {
+  update(extras: ResourceOptions = {}): MethodDecorator {
     return MergeMethodDecorators([
-      this.usePrefix(Patch, ':id'),
+      this.usePrefix(Patch, extras.prefix, ':id'),
       HttpCode(200),
       ApiOperation({
         summary: `Update a ${this.entityClassName} by id`,
-        ...extras,
+        ..._.omit(extras, 'prefix'),
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiBody({ type: this.updateDto }),
@@ -635,13 +632,13 @@ export class RestfulFactory<
     return Body(OptionalDataPipe(), OmitPipe(this.fieldsInUpdateToOmit));
   }
 
-  delete(extras: Partial<OperationObject> = {}): MethodDecorator {
+  delete(extras: ResourceOptions = {}): MethodDecorator {
     return MergeMethodDecorators([
-      this.usePrefix(Delete, ':id'),
+      this.usePrefix(Delete, extras.prefix, ':id'),
       HttpCode(200),
       ApiOperation({
         summary: `Delete a ${this.entityClassName} by id`,
-        ...extras,
+        ..._.omit(extras, 'prefix'),
       }),
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiBlankResponse(),
@@ -653,13 +650,13 @@ export class RestfulFactory<
     ]);
   }
 
-  import(extras: Partial<OperationObject> = {}): MethodDecorator {
+  import(extras: ResourceOptions = {}): MethodDecorator {
     return MergeMethodDecorators([
-      this.usePrefix(Post, 'import'),
+      this.usePrefix(Post, extras.prefix, 'import'),
       HttpCode(200),
       ApiOperation({
         summary: `Import ${this.entityClassName}`,
-        ...extras,
+        ..._.omit(extras, 'prefix'),
       }),
       ApiBody({ type: this.importDto }),
       ApiOkResponse({ type: this.importReturnMessageDto }),
@@ -669,17 +666,16 @@ export class RestfulFactory<
 
   operation(
     operationName: string,
-    options: {
+    options: ResourceOptions & {
       returnType?: AnyClass;
-      operationExtras?: Partial<OperationObject>;
     } = {},
   ): MethodDecorator {
     return MergeMethodDecorators([
-      this.usePrefix(Post, `:id/${operationName}`),
+      this.usePrefix(Post, options.prefix, ':id', operationName),
       HttpCode(200),
       ApiOperation({
         summary: `${upperFirst(operationName)} a ${this.entityClassName} by id`,
-        ...(options.operationExtras || {}),
+        ..._.omit(options, 'prefix', 'returnType'),
       }),
       options.returnType
         ? ApiTypeResponse(options.returnType)

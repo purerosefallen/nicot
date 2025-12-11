@@ -771,13 +771,16 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         flush: () => Promise<void>;
       },
     ) => Awaitable<R>,
-    extraOptions: FindOneOptions<T> = {},
+    options: {
+      find?: FindOneOptions<T>;
+      repo?: Repository<T>;
+    } = {},
   ): Promise<GenericReturnMessageDto<R>> {
     const bindingEnt = await this.getBindingPartialEntity();
     const where: FindOptionsWhere<T> = {
       id,
       ...bindingEnt,
-      ...(extraOptions.where || {}),
+      ...(options.find?.where || {}),
     };
     const throw404 = () => {
       throw new BlankReturnMessageDto(
@@ -788,11 +791,10 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     if (!(await this.repo.exists({ where }))) {
       throw404();
     }
-    const res = await this.repo.manager.transaction(async (tdb) => {
-      const repo = tdb.getRepository(this.entityClass);
+    const op = async (repo: Repository<T>) => {
       const ent = await repo.findOne({
         lock: { mode: 'pessimistic_write' },
-        ...extraOptions,
+        ...(options.find || {}),
         where,
       });
       if (!ent) {
@@ -826,7 +828,12 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       const result = await cb(entProxy, { repo, flush });
       await flush();
       return result;
-    });
+    };
+    const res = await (options.repo
+      ? op(options.repo)
+      : this.repo.manager.transaction((tdb) =>
+          op(tdb.getRepository(this.entityClass)),
+        ));
     if (res == null) {
       return new BlankReturnMessageDto(200, 'success');
     } else {

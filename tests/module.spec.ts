@@ -82,12 +82,6 @@ class SingleUserController extends dec.baseController({}) {
   }
 }
 
-describe('dummy1', () => {
-  it('should pass', () => {
-    expect(true).toBe(true);
-  });
-});
-
 describe('app', () => {
   let app: NestExpressApplication;
 
