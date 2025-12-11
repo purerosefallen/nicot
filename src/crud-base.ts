@@ -793,7 +793,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     }
     const op = async (repo: Repository<T>) => {
       const ent = await repo.findOne({
-        lock: { mode: 'pessimistic_write' },
+        lock: { mode: 'pessimistic_write', tables: [repo.metadata.tableName] },
         ...(options.find || {}),
         where,
       });
