@@ -797,54 +797,52 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
 
     // -------- utils (keep simple) --------
 
-    const isPlainObject = (v: unknown): v is Record<string, any> => {
-      if (!v || typeof v !== 'object') return false;
-      const proto = Object.getPrototypeOf(v);
-      return proto === Object.prototype || proto === null;
+    const isAtomicObject = (v: unknown) => {
+      if (!v || typeof v !== 'object') return true;
+      if (v instanceof Date) return true;
+      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v)) return true;
+      if (ArrayBuffer.isView(v) || v instanceof ArrayBuffer) return true;
+      return false;
     };
 
-    const cloneAtomicOrJson = <V>(v: V): V => {
+    const cloneForSnapshot = <V>(v: V): V => {
       if (v == null) return v;
-
-      // primitives
       if (typeof v !== 'object') return v;
 
-      // Date
+      // atomic
       if (v instanceof Date) return new Date(v.getTime()) as any;
-
-      // Buffer / TypedArray / ArrayBuffer
-      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v)) {
+      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v))
         return Buffer.from(v) as any;
-      }
-      if (ArrayBuffer.isView(v)) {
-        // Uint8Array etc.
-        const ctor = (v as any).constructor;
-        return new ctor((v as any).slice?.() ?? v) as any;
-      }
+      if (ArrayBuffer.isView(v)) return (v as any).slice?.() ?? v;
       if (v instanceof ArrayBuffer) return v.slice(0) as any;
 
-      // array / plain object => deep clone for json/jsonb usage
-      if (Array.isArray(v) || isPlainObject(v)) {
-        // Node 18+ has structuredClone. Jest env usually supports it.
-        // Fallback to JSON clone (good enough for jsonb; won't support Date/Buffer but we handled those above)
-        const sc = (globalThis as any).structuredClone;
-        if (typeof sc === 'function') return sc(v);
-        return JSON.parse(JSON.stringify(v)) as V;
+      // everything else: deep clone (class instance included)
+      const sc = (globalThis as any).structuredClone;
+      if (typeof sc === 'function') {
+        try {
+          return sc(v);
+        } catch {
+          // fall through
+        }
       }
 
-      // other objects (class instances) => keep reference (rare for real columns)
-      return v;
+      // fallback: clone enumerable props recursively (class instance -> plain object snapshot)
+      if (Array.isArray(v)) return v.map(cloneForSnapshot) as any;
+
+      const out: Record<string, any> = {};
+      for (const k of Object.keys(v as any))
+        out[k] = cloneForSnapshot((v as any)[k]);
+      return out as any;
     };
 
     const deepEqual = (a: any, b: any): boolean => {
       if (a === b) return true;
       if (a == null || b == null) return a === b;
 
-      // Date
+      // atomic
       if (a instanceof Date && b instanceof Date)
         return a.getTime() === b.getTime();
 
-      // Buffer
       if (
         typeof Buffer !== 'undefined' &&
         Buffer.isBuffer(a) &&
@@ -853,7 +851,6 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         return a.equals(b);
       }
 
-      // TypedArray / ArrayBuffer
       if (ArrayBuffer.isView(a) && ArrayBuffer.isView(b)) {
         if (a.byteLength !== b.byteLength) return false;
         const ua = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
@@ -861,6 +858,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         for (let i = 0; i < ua.length; i++) if (ua[i] !== ub[i]) return false;
         return true;
       }
+
       if (a instanceof ArrayBuffer && b instanceof ArrayBuffer) {
         if (a.byteLength !== b.byteLength) return false;
         const ua = new Uint8Array(a);
@@ -869,17 +867,16 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         return true;
       }
 
-      // arrays
-      if (Array.isArray(a) || Array.isArray(b)) {
-        if (!Array.isArray(a) || !Array.isArray(b)) return false;
-        if (a.length !== b.length) return false;
-        for (let i = 0; i < a.length; i++)
-          if (!deepEqual(a[i], b[i])) return false;
-        return true;
-      }
-
-      // plain objects
+      // if either is non-atomic object => compare as structured data
       if (typeof a === 'object' && typeof b === 'object') {
+        if (Array.isArray(a) || Array.isArray(b)) {
+          if (!Array.isArray(a) || !Array.isArray(b)) return false;
+          if (a.length !== b.length) return false;
+          for (let i = 0; i < a.length; i++)
+            if (!deepEqual(a[i], b[i])) return false;
+          return true;
+        }
+
         const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
         for (const k of keys) {
           if (!deepEqual(a[k], b[k])) return false;
@@ -910,11 +907,8 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       const snapshot: Partial<Record<keyof T, any>> = {};
       const snapshotHasKey: Partial<Record<keyof T, boolean>> = {};
       for (const key of columns) {
-        snapshotHasKey[key] = Object.prototype.hasOwnProperty.call(
-          ent as any,
-          key,
-        );
-        snapshot[key] = cloneAtomicOrJson((ent as any)[key]);
+        snapshotHasKey[key] = Object.prototype.hasOwnProperty.call(ent, key);
+        snapshot[key] = cloneForSnapshot(ent[key]);
       }
 
       const flush = async () => {
@@ -939,12 +933,12 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
           if (!deepEqual(before, current)) {
             patch[key] = current;
             snapshotHasKey[key] = true;
-            snapshot[key] = cloneAtomicOrJson(current);
+            snapshot[key] = cloneForSnapshot(current);
           }
         }
 
         if (Object.keys(patch).length) {
-          await repo.update({ id } as any, patch);
+          await repo.update({ id }, patch);
         }
       };
 

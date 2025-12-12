@@ -4,6 +4,7 @@ import {
   BindingColumn,
   BindingValue,
   IntColumn,
+  JsonColumn,
   NotQueryable,
   QueryFullText,
   StringColumn,
@@ -13,6 +14,20 @@ import { CrudService } from '../src/crud-base';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
+import { Type } from 'class-transformer';
+
+class Stats {
+  view: number;
+  like: number;
+}
+
+class Meta {
+  @Type(() => String)
+  tags?: string[];
+
+  @Type(() => Stats)
+  stats?: Stats;
+}
 
 @Entity()
 class Article extends IdBase() {
@@ -32,14 +47,8 @@ class Article extends IdBase() {
   })
   appId: number;
 
-  @Column({ type: 'jsonb', nullable: true })
-  meta: {
-    tags?: string[];
-    stats?: {
-      view: number;
-      like: number;
-    };
-  } | null;
+  @JsonColumn(Meta)
+  meta: Meta;
 }
 
 @Injectable()
