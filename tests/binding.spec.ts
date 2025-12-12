@@ -1,4 +1,4 @@
-import { Entity } from 'typeorm';
+import { Column, Entity } from 'typeorm';
 import { IdBase } from '../src/bases';
 import {
   BindingColumn,
@@ -31,6 +31,15 @@ class Article extends IdBase() {
     unsigned: true,
   })
   appId: number;
+
+  @Column({ type: 'jsonb', nullable: true })
+  meta: {
+    tags?: string[];
+    stats?: {
+      view: number;
+      like: number;
+    };
+  } | null;
 }
 
 @Injectable()
@@ -572,5 +581,84 @@ describe('binding', () => {
 
   it('operation should isolate concurrent calls (slowArticleService)', async () => {
     await testOperationConcurrentIsolation(slowArticleService);
+  });
+
+  it('operation should replace jsonb column as a whole when changed', async () => {
+    articleService.setTestAppId(44);
+    articleService.setTestUserId(7);
+
+    const created = await articleService.create({
+      name: 'JSON Article',
+      meta: {
+        tags: ['a', 'b'],
+        stats: {
+          view: 10,
+          like: 1,
+        },
+      },
+    } as Article);
+
+    const id = created.data.id;
+
+    // 1️⃣ 修改 jsonb 内部字段（deep change）
+    await articleService.operation<void>(id, async (ent, { flush }) => {
+      ent.meta!.stats!.view = 11;
+      await flush();
+    });
+
+    let row = await articleService.repo.findOne({ where: { id } });
+    expect(row!.meta).toEqual({
+      tags: ['a', 'b'],
+      stats: {
+        view: 11,
+        like: 1,
+      },
+    });
+
+    // 2️⃣ 替换整个 jsonb（array + object）
+    await articleService.operation<void>(id, async (ent, { flush }) => {
+      ent.meta = {
+        tags: ['x', 'y', 'z'],
+        stats: {
+          view: 0,
+          like: 0,
+        },
+      };
+      await flush();
+    });
+
+    row = await articleService.repo.findOne({ where: { id } });
+    expect(row!.meta).toEqual({
+      tags: ['x', 'y', 'z'],
+      stats: {
+        view: 0,
+        like: 0,
+      },
+    });
+
+    // 3️⃣ 改了又改回（deep equal），不应产生 DB 变化
+    await articleService.operation<void>(id, async (ent, { flush }) => {
+      ent.meta!.stats!.view = 123;
+      ent.meta!.stats!.view = 0; // 改回
+      await flush();
+    });
+
+    row = await articleService.repo.findOne({ where: { id } });
+    expect(row!.meta).toEqual({
+      tags: ['x', 'y', 'z'],
+      stats: {
+        view: 0,
+        like: 0,
+      },
+    });
+
+    // 4️⃣ delete jsonb -> NULL
+    await articleService.operation<void>(id, async (ent, { flush }) => {
+      delete (ent as any).meta;
+      await flush();
+    });
+
+    row = await articleService.repo.findOne({ where: { id } });
+    expect(row!.meta).toBeNull();
   });
 });

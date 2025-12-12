@@ -777,6 +777,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     } = {},
   ): Promise<GenericReturnMessageDto<R>> {
     const bindingEnt = await this.getBindingPartialEntity();
+
     const where: FindOptionsWhere<T> = {
       id,
       ...bindingEnt,
@@ -794,44 +795,44 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       throw404();
     }
 
-    const isAtomicObject = (v: unknown) => {
-      if (!v || typeof v !== 'object') return true;
-      if (v instanceof Date) return true;
-      // Buffer (node) + TypedArray / ArrayBuffer
-      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v)) return true;
-      if (ArrayBuffer.isView(v)) return true; // TypedArray / DataView
-      if (v instanceof ArrayBuffer) return true;
-      // 其它你认为需要“按原子处理”的（比如 RegExp）也可以加
-      if (v instanceof RegExp) return true;
-      return false;
-    };
+    // -------- utils (keep simple) --------
 
     const isPlainObject = (v: unknown): v is Record<string, any> => {
       if (!v || typeof v !== 'object') return false;
-      if (isAtomicObject(v)) return false;
       const proto = Object.getPrototypeOf(v);
       return proto === Object.prototype || proto === null;
     };
 
-    const deepClone = <V>(v: V): V => {
+    const cloneAtomicOrJson = <V>(v: V): V => {
       if (v == null) return v;
+
+      // primitives
       if (typeof v !== 'object') return v;
+
+      // Date
       if (v instanceof Date) return new Date(v.getTime()) as any;
-      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v))
+
+      // Buffer / TypedArray / ArrayBuffer
+      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v)) {
         return Buffer.from(v) as any;
-      if (ArrayBuffer.isView(v)) return (v as any).slice?.() ?? v;
+      }
+      if (ArrayBuffer.isView(v)) {
+        // Uint8Array etc.
+        const ctor = (v as any).constructor;
+        return new ctor((v as any).slice?.() ?? v) as any;
+      }
       if (v instanceof ArrayBuffer) return v.slice(0) as any;
 
-      if (Array.isArray(v)) return v.map(deepClone) as any;
-      if (isPlainObject(v)) {
-        const out: Record<string, any> = {};
-        for (const k of Object.keys(v as any))
-          out[k] = deepClone((v as any)[k]);
-        return out as any;
+      // array / plain object => deep clone for json/jsonb usage
+      if (Array.isArray(v) || isPlainObject(v)) {
+        // Node 18+ has structuredClone. Jest env usually supports it.
+        // Fallback to JSON clone (good enough for jsonb; won't support Date/Buffer but we handled those above)
+        const sc = (globalThis as any).structuredClone;
+        if (typeof sc === 'function') return sc(v);
+        return JSON.parse(JSON.stringify(v)) as V;
       }
 
-      // 非 plain object（比如 class instance）：我们不递归内部结构，按“引用/值”整体比较；
-      // clone 也就直接返回（避免破坏实例）
+      // other objects (class instances) => keep reference (rare for real columns)
       return v;
     };
 
@@ -839,31 +840,33 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       if (a === b) return true;
       if (a == null || b == null) return a === b;
 
-      // atomic objects
-      if (isAtomicObject(a) || isAtomicObject(b)) {
-        if (a instanceof Date && b instanceof Date)
-          return a.getTime() === b.getTime();
-        if (
-          typeof Buffer !== 'undefined' &&
-          Buffer.isBuffer(a) &&
-          Buffer.isBuffer(b)
-        )
-          return a.equals(b);
-        if (ArrayBuffer.isView(a) && ArrayBuffer.isView(b)) {
-          if (a.byteLength !== b.byteLength) return false;
-          const ua = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
-          const ub = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-          for (let i = 0; i < ua.length; i++) if (ua[i] !== ub[i]) return false;
-          return true;
-        }
-        if (a instanceof ArrayBuffer && b instanceof ArrayBuffer) {
-          if (a.byteLength !== b.byteLength) return false;
-          const ua = new Uint8Array(a);
-          const ub = new Uint8Array(b);
-          for (let i = 0; i < ua.length; i++) if (ua[i] !== ub[i]) return false;
-          return true;
-        }
-        return false;
+      // Date
+      if (a instanceof Date && b instanceof Date)
+        return a.getTime() === b.getTime();
+
+      // Buffer
+      if (
+        typeof Buffer !== 'undefined' &&
+        Buffer.isBuffer(a) &&
+        Buffer.isBuffer(b)
+      ) {
+        return a.equals(b);
+      }
+
+      // TypedArray / ArrayBuffer
+      if (ArrayBuffer.isView(a) && ArrayBuffer.isView(b)) {
+        if (a.byteLength !== b.byteLength) return false;
+        const ua = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+        const ub = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+        for (let i = 0; i < ua.length; i++) if (ua[i] !== ub[i]) return false;
+        return true;
+      }
+      if (a instanceof ArrayBuffer && b instanceof ArrayBuffer) {
+        if (a.byteLength !== b.byteLength) return false;
+        const ua = new Uint8Array(a);
+        const ub = new Uint8Array(b);
+        for (let i = 0; i < ua.length; i++) if (ua[i] !== ub[i]) return false;
+        return true;
       }
 
       // arrays
@@ -875,58 +878,19 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
         return true;
       }
 
-      // plain objects => deep compare keys
-      if (isPlainObject(a) && isPlainObject(b)) {
-        const ak = Object.keys(a);
-        const bk = Object.keys(b);
-        if (ak.length !== bk.length) return false;
-        // key set
-        for (const k of ak) if (!(k in b)) return false;
-        // values
-        for (const k of ak) if (!deepEqual(a[k], b[k])) return false;
+      // plain objects
+      if (typeof a === 'object' && typeof b === 'object') {
+        const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+        for (const k of keys) {
+          if (!deepEqual(a[k], b[k])) return false;
+        }
         return true;
       }
 
-      // fallback: non-plain objects (class instances) => strict
       return false;
     };
 
-    /**
-     * 返回“最小”差异对象：
-     * - plain object/array 会递归比较
-     * - 但最终仍然是可用于 TypeORM `update()` 的结构（嵌入对象可用嵌套对象；json列通常会整列替换）
-     */
-    const deepDiff = (before: any, after: any): any | undefined => {
-      if (deepEqual(before, after)) return undefined;
-
-      // arrays: 只要内部不同，就直接返回新数组（避免复杂的 patch 语义）
-      if (Array.isArray(after)) return deepClone(after);
-
-      // plain object: 递归出一个“部分对象”
-      if (isPlainObject(after) && isPlainObject(before)) {
-        const out: Record<string, any> = {};
-        const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
-        for (const k of keys) {
-          const bHas = Object.prototype.hasOwnProperty.call(before, k);
-          const aHas = Object.prototype.hasOwnProperty.call(after, k);
-
-          // delete: after 缺失该 key
-          if (bHas && !aHas) {
-            // 跟你原来的语义对齐：初始为 null => 不用管；否则写 null
-            if (before[k] !== null) out[k] = null;
-            continue;
-          }
-
-          // add/change
-          const sub = deepDiff(before?.[k], after?.[k]);
-          if (sub !== undefined) out[k] = sub;
-        }
-        return Object.keys(out).length ? out : undefined;
-      }
-
-      // 其它类型：整体替换
-      return deepClone(after);
-    };
+    // -------- core --------
 
     const op = async (repo: Repository<T>) => {
       const ent = await repo.findOne({
@@ -937,38 +901,51 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
 
       if (!ent) throw404();
 
-      // 这里的 snapshot 用 deepClone，保证 flush 比较的是“当时值”
-      // 注意：对 class instance 非 plain object 的字段，我们不会深拷贝内部结构
-      const snapshot = deepClone(ent as any) as any;
+      // columns we are allowed to update
+      const columns = repo.metadata.columns.map(
+        (c) => c.propertyName,
+      ) as (keyof T)[];
 
-      // 允许 update 的字段（只对 metadata 里存在的列）
-      const allowed = new Set<string>();
-      for (const c of repo.metadata.columns) {
-        if (c.propertyName) allowed.add(c.propertyName);
-        if ((c as any).propertyPath) allowed.add((c as any).propertyPath);
+      // snapshot ONLY stores column values, and clones json-ish values to avoid shared refs
+      const snapshot: Partial<Record<keyof T, any>> = {};
+      const snapshotHasKey: Partial<Record<keyof T, boolean>> = {};
+      for (const key of columns) {
+        snapshotHasKey[key] = Object.prototype.hasOwnProperty.call(
+          ent as any,
+          key,
+        );
+        snapshot[key] = cloneAtomicOrJson((ent as any)[key]);
       }
 
-      const filterByMetadata = (patch: any) => {
-        if (!patch || typeof patch !== 'object') return patch;
-        const out: Record<string, any> = {};
-        for (const k of Object.keys(patch)) {
-          // 顶层 key 必须是 column（或 embedded 的 propertyPath）
-          if (allowed.has(k)) out[k] = patch[k];
-        }
-        return out;
-      };
-
       const flush = async () => {
-        const patchRaw = deepDiff(snapshot, ent as any);
-        if (!patchRaw || typeof patchRaw !== 'object') return;
+        const patch: Partial<T> = {};
 
-        const patch = filterByMetadata(patchRaw);
-        if (!Object.keys(patch).length) return;
+        for (const key of columns) {
+          const hasNow = Object.prototype.hasOwnProperty.call(ent, key);
 
-        // 应用 patch 到 snapshot，避免重复写同一批变更
-        Object.assign(snapshot, deepClone(patch));
+          // delete -> NULL (only if it existed initially or previously flushed)
+          if (!hasNow) {
+            if (snapshotHasKey[key]) {
+              patch[key] = null;
+              snapshotHasKey[key] = true; // after update, column exists with null
+              snapshot[key] = null;
+            }
+            continue;
+          }
 
-        await repo.update({ id } as any, patch);
+          const current = ent[key];
+          const before = snapshot[key];
+
+          if (!deepEqual(before, current)) {
+            patch[key] = current;
+            snapshotHasKey[key] = true;
+            snapshot[key] = cloneAtomicOrJson(current);
+          }
+        }
+
+        if (Object.keys(patch).length) {
+          await repo.update({ id } as any, patch);
+        }
       };
 
       const result = await cb(ent, { repo, flush });
