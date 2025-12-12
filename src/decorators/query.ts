@@ -144,6 +144,7 @@ export const createQueryArrayify = (
     if (items.length === 1 && singleFallbackWrapper) {
       const singleRes = singleFallbackWrapper(entityExpr, varExpr, info);
       if (singleRes) {
+        info.mutateValue(items[0]);
         return singleRes;
       }
     }
