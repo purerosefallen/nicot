@@ -782,63 +782,209 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       ...bindingEnt,
       ...(options.find?.where || {}),
     };
+
     const throw404 = () => {
       throw new BlankReturnMessageDto(
         404,
         `${this.entityName} ID ${id} not found.`,
       ).toException();
     };
+
     if (!(await this.repo.exists({ where }))) {
       throw404();
     }
+
+    const isAtomicObject = (v: unknown) => {
+      if (!v || typeof v !== 'object') return true;
+      if (v instanceof Date) return true;
+      // Buffer (node) + TypedArray / ArrayBuffer
+      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v)) return true;
+      if (ArrayBuffer.isView(v)) return true; // TypedArray / DataView
+      if (v instanceof ArrayBuffer) return true;
+      // 其它你认为需要“按原子处理”的（比如 RegExp）也可以加
+      if (v instanceof RegExp) return true;
+      return false;
+    };
+
+    const isPlainObject = (v: unknown): v is Record<string, any> => {
+      if (!v || typeof v !== 'object') return false;
+      if (isAtomicObject(v)) return false;
+      const proto = Object.getPrototypeOf(v);
+      return proto === Object.prototype || proto === null;
+    };
+
+    const deepClone = <V>(v: V): V => {
+      if (v == null) return v;
+      if (typeof v !== 'object') return v;
+      if (v instanceof Date) return new Date(v.getTime()) as any;
+      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v))
+        return Buffer.from(v) as any;
+      if (ArrayBuffer.isView(v)) return (v as any).slice?.() ?? v;
+      if (v instanceof ArrayBuffer) return v.slice(0) as any;
+
+      if (Array.isArray(v)) return v.map(deepClone) as any;
+      if (isPlainObject(v)) {
+        const out: Record<string, any> = {};
+        for (const k of Object.keys(v as any))
+          out[k] = deepClone((v as any)[k]);
+        return out as any;
+      }
+
+      // 非 plain object（比如 class instance）：我们不递归内部结构，按“引用/值”整体比较；
+      // clone 也就直接返回（避免破坏实例）
+      return v;
+    };
+
+    const deepEqual = (a: any, b: any): boolean => {
+      if (a === b) return true;
+      if (a == null || b == null) return a === b;
+
+      // atomic objects
+      if (isAtomicObject(a) || isAtomicObject(b)) {
+        if (a instanceof Date && b instanceof Date)
+          return a.getTime() === b.getTime();
+        if (
+          typeof Buffer !== 'undefined' &&
+          Buffer.isBuffer(a) &&
+          Buffer.isBuffer(b)
+        )
+          return a.equals(b);
+        if (ArrayBuffer.isView(a) && ArrayBuffer.isView(b)) {
+          if (a.byteLength !== b.byteLength) return false;
+          const ua = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+          const ub = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+          for (let i = 0; i < ua.length; i++) if (ua[i] !== ub[i]) return false;
+          return true;
+        }
+        if (a instanceof ArrayBuffer && b instanceof ArrayBuffer) {
+          if (a.byteLength !== b.byteLength) return false;
+          const ua = new Uint8Array(a);
+          const ub = new Uint8Array(b);
+          for (let i = 0; i < ua.length; i++) if (ua[i] !== ub[i]) return false;
+          return true;
+        }
+        return false;
+      }
+
+      // arrays
+      if (Array.isArray(a) || Array.isArray(b)) {
+        if (!Array.isArray(a) || !Array.isArray(b)) return false;
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++)
+          if (!deepEqual(a[i], b[i])) return false;
+        return true;
+      }
+
+      // plain objects => deep compare keys
+      if (isPlainObject(a) && isPlainObject(b)) {
+        const ak = Object.keys(a);
+        const bk = Object.keys(b);
+        if (ak.length !== bk.length) return false;
+        // key set
+        for (const k of ak) if (!(k in b)) return false;
+        // values
+        for (const k of ak) if (!deepEqual(a[k], b[k])) return false;
+        return true;
+      }
+
+      // fallback: non-plain objects (class instances) => strict
+      return false;
+    };
+
+    /**
+     * 返回“最小”差异对象：
+     * - plain object/array 会递归比较
+     * - 但最终仍然是可用于 TypeORM `update()` 的结构（嵌入对象可用嵌套对象；json列通常会整列替换）
+     */
+    const deepDiff = (before: any, after: any): any | undefined => {
+      if (deepEqual(before, after)) return undefined;
+
+      // arrays: 只要内部不同，就直接返回新数组（避免复杂的 patch 语义）
+      if (Array.isArray(after)) return deepClone(after);
+
+      // plain object: 递归出一个“部分对象”
+      if (isPlainObject(after) && isPlainObject(before)) {
+        const out: Record<string, any> = {};
+        const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+        for (const k of keys) {
+          const bHas = Object.prototype.hasOwnProperty.call(before, k);
+          const aHas = Object.prototype.hasOwnProperty.call(after, k);
+
+          // delete: after 缺失该 key
+          if (bHas && !aHas) {
+            // 跟你原来的语义对齐：初始为 null => 不用管；否则写 null
+            if (before[k] !== null) out[k] = null;
+            continue;
+          }
+
+          // add/change
+          const sub = deepDiff(before?.[k], after?.[k]);
+          if (sub !== undefined) out[k] = sub;
+        }
+        return Object.keys(out).length ? out : undefined;
+      }
+
+      // 其它类型：整体替换
+      return deepClone(after);
+    };
+
     const op = async (repo: Repository<T>) => {
       const ent = await repo.findOne({
         lock: { mode: 'pessimistic_write', tables: [repo.metadata.tableName] },
         ...(options.find || {}),
         where,
       });
-      if (!ent) {
-        throw404();
+
+      if (!ent) throw404();
+
+      // 这里的 snapshot 用 deepClone，保证 flush 比较的是“当时值”
+      // 注意：对 class instance 非 plain object 的字段，我们不会深拷贝内部结构
+      const snapshot = deepClone(ent as any) as any;
+
+      // 允许 update 的字段（只对 metadata 里存在的列）
+      const allowed = new Set<string>();
+      for (const c of repo.metadata.columns) {
+        if (c.propertyName) allowed.add(c.propertyName);
+        if ((c as any).propertyPath) allowed.add((c as any).propertyPath);
       }
-      const initial = { ...ent };
-      let changes: Partial<T> = {};
-      const entProxy = observeDiff(ent, (change) => {
-        if (change.type === 'delete') {
-          if (initial[change.key] === null) {
-            delete changes[change.key];
-          } else {
-            changes[change.key] = null;
-          }
-        } else {
-          if (change.newValue !== initial[change.key]) {
-            changes[change.key] = change.newValue;
-          } else {
-            delete changes[change.key];
-          }
+
+      const filterByMetadata = (patch: any) => {
+        if (!patch || typeof patch !== 'object') return patch;
+        const out: Record<string, any> = {};
+        for (const k of Object.keys(patch)) {
+          // 顶层 key 必须是 column（或 embedded 的 propertyPath）
+          if (allowed.has(k)) out[k] = patch[k];
         }
-      });
-      const flush = async () => {
-        if (Object.keys(changes).length) {
-          const currentChanges = { ...changes };
-          Object.assign(initial, changes);
-          changes = {};
-          await repo.update({ id }, currentChanges);
-        }
+        return out;
       };
-      const result = await cb(entProxy, { repo, flush });
+
+      const flush = async () => {
+        const patchRaw = deepDiff(snapshot, ent as any);
+        if (!patchRaw || typeof patchRaw !== 'object') return;
+
+        const patch = filterByMetadata(patchRaw);
+        if (!Object.keys(patch).length) return;
+
+        // 应用 patch 到 snapshot，避免重复写同一批变更
+        Object.assign(snapshot, deepClone(patch));
+
+        await repo.update({ id } as any, patch);
+      };
+
+      const result = await cb(ent, { repo, flush });
       await flush();
       return result;
     };
+
     const res = await (options.repo
       ? op(options.repo)
       : this.repo.manager.transaction((tdb) =>
           op(tdb.getRepository(this.entityClass)),
         ));
-    if (res == null) {
-      return new BlankReturnMessageDto(200, 'success');
-    } else {
-      return new GenericReturnMessageDto(200, 'success', res);
-    }
+
+    return res == null
+      ? new BlankReturnMessageDto(200, 'success')
+      : new GenericReturnMessageDto(200, 'success', res);
   }
 
   async _loadFullTextIndex() {
