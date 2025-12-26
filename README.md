@@ -1169,6 +1169,414 @@ You can still build custom endpoints and return these wrappers manually if neede
 
 ---
 
+## Transactional TypeORM (request-scoped transactions)
+
+NICOT’s CRUD flows are TypeORM-based, but by default each repository call is not automatically wrapped in a single database transaction.
+
+If you want **“one HTTP request = one DB transaction”**, NICOT provides a small TypeORM wrapper:
+
+- `TransactionalTypeOrmInterceptor()` — starts a TypeORM transaction at the beginning of a request and commits or rolls it back when request processing finishes or fails.
+- `TransactionalTypeOrmModule.forFeature(...)` — provides **request-scoped** transaction-aware `EntityManager` / `Repository` injection tokens, and also includes the TypeORM `forFeature()` import/export.
+
+### When to use
+
+Use transactional mode when you want:
+
+- multiple writes across different repositories to **commit/rollback together**
+- service methods that mix `create/update/delete` and custom repo operations
+- deterministic rollback when you throw `BlankReturnMessageDto(...).toException()`
+
+Avoid it for:
+
+- streaming responses (SSE / long-lived streams) — the transaction would stay open until the stream completes
+- very heavy read-only endpoints where a transaction adds overhead
+
+### 1) Import TransactionalTypeOrmModule
+
+In the module that owns your resource:
+
+```ts
+import { Module } from '@nestjs/common';
+import { User } from './user.entity';
+import { UserController } from './user.controller';
+import { UserService } from './user.service';
+
+import { TransactionalTypeOrmModule } from 'nicot'; // or your local path
+
+@Module({
+  imports: [
+    // ⭐ includes TypeOrmModule.forFeature([User]) internally and re-exports it
+    TransactionalTypeOrmModule.forFeature([User]),
+  ],
+  controllers: [UserController],
+  providers: [UserService],
+})
+export class UserModule {}
+```
+
+Notes:
+
+- The providers created by `TransactionalTypeOrmModule.forFeature(...)` are `Scope.REQUEST`.
+- You still need a `TypeOrmModule.forRoot(...)` (or equivalent) at app root to configure the DataSource.
+
+### 2) Enable TransactionalTypeOrmInterceptor() for the controller
+
+Apply the interceptor to ensure a transaction is created for each HTTP request:
+
+```
+import { Controller, UseInterceptors } from '@nestjs/common';
+import { RestfulFactory } from 'nicot';
+import { User } from './user.entity';
+import { TransactionalTypeOrmInterceptor } from 'nicot';
+
+export const UserFactory = new RestfulFactory(User);
+
+@Controller('users')
+@UseInterceptors(TransactionalTypeOrmInterceptor())
+export class UserController extends UserFactory.baseController() {
+  constructor(service: UserService) {
+    super(service);
+  }
+}
+```
+
+Behavior:
+
+- Transaction begins before controller handler runs.
+- Transaction commits when the returned Observable completes.
+- Transaction rolls back when the Observable errors (including thrown HTTP exceptions).
+
+### 3) Inject Transactional Repository / EntityManager in services
+
+To actually use the transaction context, inject the transactional repo/em instead of the default TypeORM ones.
+
+#### Transactional repository (recommended)
+
+```ts
+import { Injectable } from '@nestjs/common';
+import { Repository } from 'typeorm';
+import { RestfulFactory } from 'nicot';
+import { InjectTransactionalRepository } from 'nicot';
+import { User } from './user.entity';
+
+export const UserFactory = new RestfulFactory(User);
+
+@Injectable()
+export class UserService extends UserFactory.crudService() {
+  constructor(
+    @InjectTransactionalRepository(User)
+    repo: Repository<User>,
+  ) {
+    super(repo);
+  }
+}
+```
+
+Now all NICOT CRUD operations (`create/findAll/update/delete/import`) will run using the transaction-bound repository when the interceptor is active.
+
+#### Transactional entity manager (advanced)
+
+```ts
+import { Injectable } from '@nestjs/common';
+import { EntityManager } from 'typeorm';
+import { InjectTransactionalEntityManager } from 'nicot';
+
+@Injectable()
+export class UserTxService {
+  constructor(
+    @InjectTransactionalEntityManager()
+    private readonly em: EntityManager,
+  ) {}
+
+  async doSomethingComplex() {
+    // this.em is transaction-bound when interceptor is active
+  }
+}
+```
+
+### Rollback example (404)
+
+If you throw a NICOT exception after writing, the transaction will roll back:
+
+```ts
+@Post('fail')
+async fail() {
+  await this.service.repo.save({ name: 'ROLL' } as any);
+  throw new BlankReturnMessageDto(404, 'message').toException();
+}
+```
+
+Expected:
+
+- HTTP response is `404`
+- database changes are not committed (rollback)
+
+---
+
+## Operation: Atomic business logic on a single entity
+
+NICOT provides an **`operation` abstraction** for implementing
+**atomic, row-level business logic** on top of a `CrudService`.
+
+This abstraction exists on **two different layers**:
+
+1. **Service layer**: `CrudService.operation()`
+2. **Controller layer**: `RestfulFactory.operation()`
+
+They are designed to be **orthogonal**:
+- the service operation **executes domain logic**
+- the factory operation **exposes it as an HTTP endpoint**
+
+You may use either one independently, or combine them.
+
+---
+
+### Service-level operation (`CrudService.operation()`)
+
+#### What it does
+
+`CrudService.operation()` executes a callback with:
+
+- a **row-level write lock** on the target entity
+- a transactional repository (unless one is explicitly provided)
+- automatic **change tracking and flushing**
+- full compatibility with NICOT binding (`@BindingColumn`, `@BindingValue`)
+
+Internally, it follows this lifecycle:
+
+1. Resolve binding values (tenant / owner isolation)
+2. Check entity existence
+3. Open a transaction (unless `options.repo` is provided)
+4. Load the entity with `pessimistic_write` lock
+5. Snapshot column values
+6. Run user callback
+7. Flush only changed columns
+8. Commit or rollback
+
+---
+
+#### Basic usage (inside a service)
+
+```ts
+@Injectable()
+class UserService extends UserFactory.crudService() {
+  async disableUser(id: number) {
+    return this.operation(id, async (user) => {
+      user.isActive = false;
+    });
+  }
+}
+```
+
+Return behavior:
+
+- callback returns `void | undefined | null`  
+  → `BlankReturnMessageDto(200, 'success')`
+- callback returns a value  
+  → `GenericReturnMessageDto(200, 'success', value)`
+
+---
+
+#### Returning business data
+
+```ts
+async disableAndReport(id: number) {
+  return this.operation(id, async (user) => {
+    user.isActive = false;
+    return { disabled: true };
+  });
+}
+```
+
+---
+
+#### Error handling & rollback
+
+Any exception thrown inside the callback causes a rollback.
+
+```ts
+async dangerousOperation(id: number) {
+  return this.operation(id, async () => {
+    throw new BlankReturnMessageDto(403, 'Forbidden').toException();
+  });
+}
+```
+
+---
+
+#### Binding-aware by default
+
+`operation()` never bypasses NICOT binding rules.
+
+If your entity has:
+
+```ts
+@BindingColumn()
+userId: number;
+```
+
+and your service defines:
+
+```ts
+@BindingValue()
+get currentUserId() {
+  return this.ctx.userId;
+}
+```
+
+then `operation()` will automatically:
+
+- restrict existence checks
+- restrict row locking
+- restrict updates
+
+to the current binding scope.
+
+---
+
+#### Using `options.repo` (integration with transactional interceptors)
+
+By default, `operation()` opens its own transaction.
+
+If you pass a repository via `options.repo`,
+**no new transaction will be created**.
+
+This is intended for integration with
+`TransactionalTypeOrmModule` and `TransactionalTypeOrmInterceptor`.
+
+```ts
+@Injectable()
+class UserService extends UserFactory.crudService() {
+  constructor(
+    @InjectTransactionalRepository(User)
+    private readonly repo: Repository<User>,
+  ) {
+    super(repo);
+  }
+
+  async updateInsideRequestTransaction(id: number) {
+    return this.operation(
+      id,
+      async (user) => {
+        user.name = 'Updated in request transaction';
+      },
+      {
+        repo: this.repo,
+      },
+    );
+  }
+}
+```
+
+This allows:
+
+- request-wide transactions
+- consistent behavior across multiple service calls
+- zero coupling between business logic and infrastructure
+
+---
+
+### Controller-level operation (`RestfulFactory.operation()`)
+
+#### What it does (and what it does NOT)
+
+`RestfulFactory.operation()` **does not implement any business logic**.
+
+It only:
+
+- declares an HTTP endpoint
+- wires Swagger metadata
+- standardizes request / response shape
+- delegates execution to your service method
+
+Think of it as **a declarative endpoint generator**, not an executor.
+
+---
+
+#### Declaring an operation endpoint
+
+```ts
+@Controller('users')
+export class UserController {
+  constructor(private readonly userService: UserService) {}
+
+  @UserFactory.operation('disable')
+  async disable(@UserFactory.idParam() id: number) {
+    return this.userService.disableUser(id);
+  }
+}
+```
+
+This generates:
+
+- `POST /users/:id/disable`
+- Swagger operation summary
+- standardized NICOT response envelope
+
+---
+
+#### Returning custom data
+
+```ts
+@UserFactory.operation('reset-password', {
+  returnType: ResetPasswordResultDto,
+})
+async resetPassword(@UserFactory.idParam() id: number) {
+  return this.userService.resetPassword(id);
+}
+```
+
+---
+
+### Combining both layers (recommended pattern)
+
+The **recommended pattern** is:
+
+- put **all business logic** in `CrudService.operation()`
+- expose it via `RestfulFactory.operation()`
+
+This gives you:
+
+- reusable domain logic
+- testable service methods
+- thin, declarative controllers
+
+```ts
+@Injectable()
+class UserService extends UserFactory.crudService() {
+  async disableUser(id: number) {
+    return this.operation(id, async (user) => {
+      user.isActive = false;
+    });
+  }
+}
+
+@Controller('users')
+class UserController {
+  constructor(private readonly userService: UserService) {}
+
+  @UserFactory.operation('disable')
+  disable(@UserFactory.idParam() id: number) {
+    return this.userService.disableUser(id);
+  }
+}
+```
+
+---
+
+### Design philosophy
+
+- `operation()` is **not** a CRUD replacement
+- it is **not** a generic transaction wrapper
+- it is a **domain-oriented mutation primitive**
+
+In NICOT:
+
+> **CRUD is declarative**  
+> **Operations express intent**
+
+---
+
 ## Best practices
 
 - **One factory per entity**, in its own `*.factory.ts` file.  

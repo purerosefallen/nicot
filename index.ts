@@ -5,3 +5,4 @@ export * from './src/bases';
 export * from './src/decorators';
 export * from './src/dto';
 export * from './src/utility';
+export * from './src/transactional-typeorm.module';

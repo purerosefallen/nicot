@@ -407,6 +407,10 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
             ? undefined
             : ['id', 'deleteTime'],
           withDeleted: true,
+          lock: {
+            mode: 'pessimistic_write',
+            tables: [repo.metadata.tableName],
+          },
         });
         if (existingEnt) {
           if (existingEnt.deleteTime) {
@@ -947,8 +951,12 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       return result;
     };
 
+    const hasActiveTx = !!this.repo.manager.queryRunner?.isTransactionActive;
+
     const res = await (options.repo
       ? op(options.repo)
+      : hasActiveTx
+      ? op(this.repo)
       : this.repo.manager.transaction((tdb) =>
           op(tdb.getRepository(this.entityClass)),
         ));

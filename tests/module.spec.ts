@@ -3,13 +3,17 @@ import { Controller, Injectable } from '@nestjs/common';
 import { CrudService } from '../src/crud-base';
 import { Book, Gender, User } from './utility/user';
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm';
-import { DataSource, SelectQueryBuilder } from 'typeorm';
+import { DataSource, Repository, SelectQueryBuilder } from 'typeorm';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import _ from 'lodash';
 import { RestfulFactory } from '../src/restful';
 import SJSON from 'superjson';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import {
+  InjectTransactionalRepository,
+  TransactionalTypeOrmModule,
+} from '../src/transactional-typeorm.module';
 
 @Injectable()
 class BookService extends CrudService(Book, {
@@ -82,6 +86,15 @@ class SingleUserController extends dec.baseController({}) {
   }
 }
 
+@Controller('tx-user')
+class TxUserController extends dec.baseController() {
+  constructor(
+    @InjectTransactionalRepository(User) private userRepo: Repository<User>,
+  ) {
+    super(userRepo);
+  }
+}
+
 describe('app', () => {
   let app: NestExpressApplication;
 
@@ -92,7 +105,7 @@ describe('app', () => {
           type: 'postgres',
           dropSchema: true,
           synchronize: true,
-          entities: [User, Book],
+          autoLoadEntities: true,
           host: 'localhost',
           port: 5432,
           username: 'postgres',
@@ -100,9 +113,15 @@ describe('app', () => {
           database: 'postgres',
           logging: true,
         }),
+        TransactionalTypeOrmModule.forFeature([User, Book]),
       ],
       providers: [UserService, BookService],
-      controllers: [UserController, UserController2, SingleUserController],
+      controllers: [
+        UserController,
+        UserController2,
+        SingleUserController,
+        TxUserController,
+      ],
     }).compile();
     app = module.createNestApplication<NestExpressApplication>();
     const documentConfig = new DocumentBuilder()
@@ -1005,6 +1024,10 @@ describe('app', () => {
     await testHttpServer('user3');
   });
 
+  it('should work with controller (transactional)', async () => {
+    await testHttpServer('tx-user');
+  });
+
   it('should generate openapi correctly', async () => {
     const server = await app.getHttpServer();
     await request(server)
@@ -1037,6 +1060,7 @@ describe('app', () => {
         checkController(UserController, 'user');
         checkController(UserController2, 'user2');
         checkController(SingleUserController, 'user3');
+        checkController(TxUserController, 'tx-user');
       });
   });
 });
