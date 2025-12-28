@@ -28,19 +28,19 @@ export class TimeBase
   extends PageSettingsDto
   implements DeletionWise, EntityHooks
 {
-  @CreateDateColumn({ select: false })
+  @CreateDateColumn()
   @NotColumn()
   @NotInResult({ entityVersioningDate: true })
   @Reflect.metadata('design:type', Date)
   createTime: Date;
 
-  @UpdateDateColumn({ select: false })
+  @UpdateDateColumn()
   @NotColumn()
   @NotInResult({ entityVersioningDate: true })
   @Reflect.metadata('design:type', Date)
   updateTime: Date;
 
-  @DeleteDateColumn({ select: false })
+  @DeleteDateColumn()
   @NotColumn()
   @NotInResult({ entityVersioningDate: true })
   @Reflect.metadata('design:type', Date)

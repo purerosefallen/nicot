@@ -380,4 +380,52 @@ describe('upsert', () => {
     expect(rows[1].userId).toBe(8);
     expect(rows[1].code).toBe('X');
   });
+
+  it('should restore soft-deleted row on upsert (deleteTime -> NULL) and keep same id', async () => {
+    // 1) insert
+    const r1 = await singleSvc.upsert({
+      code: 'SOFT',
+      title: 'v1',
+    } as any);
+
+    const id1 = r1.data.id;
+    expect(id1).toBeDefined();
+
+    // 2) soft delete it
+    await singleSvc.repo.softDelete({ id: id1 } as any);
+
+    // sanity: row should be soft-deleted
+    const deletedRow = await singleSvc.repo.findOne({
+      where: { id: id1 } as any,
+      withDeleted: true,
+    });
+    expect(deletedRow).toBeTruthy();
+    expect((deletedRow as any).deleteTime).toBeTruthy();
+
+    // 3) upsert with same key should restore and update
+    const r2 = await singleSvc.upsert({
+      code: 'SOFT',
+      title: 'v2',
+    } as any);
+
+    // 4) should be same row id (updated, restored)
+    expect(r2.data.id).toBe(id1);
+    expect(r2.data.code).toBe('SOFT');
+    expect(r2.data.title).toBe('v2');
+
+    // 5) verify in DB: not deleted
+    const alive = await singleSvc.repo.findOne({
+      where: { id: id1 } as any,
+    });
+    expect(alive).toBeTruthy();
+    expect((alive as any).deleteTime).toBeNull();
+
+    // and still only 1 row for that key (withDeleted included)
+    const all = await singleSvc.repo.find({
+      where: { code: 'SOFT' } as any,
+      withDeleted: true,
+    });
+    expect(all).toHaveLength(1);
+    expect(all[0].id).toBe(id1);
+  });
 });

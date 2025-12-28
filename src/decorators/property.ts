@@ -358,7 +358,7 @@ export const StringJsonColumn = createJsonColumnDef(
 
 export const NotColumn = (
   options: OpenAPIOptions<any> = {},
-  specials: { keepInCreate?: boolean } = {},
+  specials: { keepInCreate?: boolean; hideInUpsert?: boolean } = {},
 ): PropertyDecorator =>
   MergePropertyDecorators([
     Exclude(),

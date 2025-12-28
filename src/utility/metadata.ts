@@ -6,7 +6,7 @@ import { GetMutatorOptions } from '../decorators/get-mutator';
 import { BindingValueMetadata } from '../decorators/binding';
 
 interface SpecificFields {
-  notColumn: { keepInCreate?: boolean; keepInUpsert?: boolean };
+  notColumn: { keepInCreate?: boolean; hideInUpsert?: boolean };
   notWritable: boolean;
   notCreatable: boolean;
   notChangeable: boolean;

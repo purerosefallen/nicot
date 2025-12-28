@@ -535,7 +535,7 @@ export class RestfulFactory<
         ...(getSpecificFields(
           this.entityClass,
           'notColumn',
-          (m) => !m.keepInUpsert,
+          (m) => m.hideInUpsert,
         ) as any[]),
       ]),
       `${this.entityClassName}UpsertResultDto`,
