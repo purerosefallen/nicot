@@ -8,6 +8,7 @@ export const RestfulMethods = [
   'findAll',
   'create',
   'update',
+  'upsert',
   'delete',
   'import',
 ] as const;
@@ -57,6 +58,10 @@ export class BaseRestfulController<T extends { id: any }> {
 
   update(id: number, dto: Partial<T>) {
     return this._service.update(id, dto);
+  }
+
+  upsert(dto: T) {
+    return this._service.upsert(dto);
   }
 
   delete(id: number) {

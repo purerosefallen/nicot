@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ImportDataDto, ImportEntryDto } from './dto';
@@ -35,7 +36,11 @@ import {
 } from '@nestjs/swagger';
 import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import _, { upperFirst } from 'lodash';
-import { getNotInResultFields, getSpecificFields } from './utility/metadata';
+import {
+  getNotInResultFields,
+  getSpecificFields,
+  reflector,
+} from './utility/metadata';
 import { RenameClass } from 'nesties';
 import { getTypeormRelations } from './utility/get-typeorm-relations';
 import { CrudBase, CrudOptions, CrudService } from './crud-base';
@@ -65,6 +70,7 @@ export interface RestfulFactoryOptions<
   W extends keyof T = never,
   C extends keyof T = never,
   U extends keyof T = never,
+  US extends keyof T = never,
   F extends keyof T = never,
   R extends keyof T = never,
 > {
@@ -72,6 +78,7 @@ export interface RestfulFactoryOptions<
   writeFieldsToOmit?: W[];
   createFieldsToOmit?: C[];
   updateFieldsToOmit?: U[];
+  upsertFieldsToOmit?: US[];
   findAllFieldsToOmit?: F[];
   outputFieldsToOmit?: R[];
   prefix?: string;
@@ -79,6 +86,7 @@ export interface RestfulFactoryOptions<
   entityClassName?: string;
   relations?: (string | RelationDef)[];
   skipNonQueryableFields?: boolean;
+  upsertIncludeRelations?: boolean;
 }
 
 const getCurrentLevelRelations = (relations: string[]) =>
@@ -99,12 +107,13 @@ export class RestfulFactory<
   W extends keyof T = never,
   C extends keyof T = never,
   U extends keyof T = never,
+  US extends keyof T = never,
   F extends keyof T = never,
   R extends keyof T = never,
 > {
   constructor(
     public readonly entityClass: ClassType<T>,
-    private options: RestfulFactoryOptions<T, O, W, C, U, F, R> = {},
+    private options: RestfulFactoryOptions<T, O, W, C, U, US, F, R> = {},
     private __resolveVisited = new Map<AnyClass, [AnyClass]>(),
   ) {
     if (options.relations) {
@@ -114,7 +123,7 @@ export class RestfulFactory<
   }
 
   omitInput<K extends keyof T>(...fields: K[]) {
-    return new RestfulFactory<T, O | K, W, C, U, F, R>(
+    return new RestfulFactory<T, O | K, W, C, U, US, F, R>(
       this.entityClass,
       {
         ...this.options,
@@ -125,7 +134,7 @@ export class RestfulFactory<
   }
 
   omitWrite<K extends keyof T>(...fields: K[]) {
-    return new RestfulFactory<T, O, W | K, C, U, F, R>(
+    return new RestfulFactory<T, O, W | K, C, U, US, F, R>(
       this.entityClass,
       {
         ...this.options,
@@ -139,7 +148,7 @@ export class RestfulFactory<
   }
 
   omitCreate<K extends keyof T>(...fields: K[]) {
-    return new RestfulFactory<T, O, W, C | K, U, F, R>(
+    return new RestfulFactory<T, O, W, C | K, U, US, F, R>(
       this.entityClass,
       {
         ...this.options,
@@ -153,7 +162,7 @@ export class RestfulFactory<
   }
 
   omitUpdate<K extends keyof T>(...fields: K[]) {
-    return new RestfulFactory<T, O, W, C, U | K, F, R>(
+    return new RestfulFactory<T, O, W, C, U | K, US, F, R>(
       this.entityClass,
       {
         ...this.options,
@@ -166,8 +175,22 @@ export class RestfulFactory<
     );
   }
 
+  omitUpsert<K extends keyof T>(...fields: K[]) {
+    return new RestfulFactory<T, O, W, C, U, US | K, F, R>(
+      this.entityClass,
+      {
+        ...this.options,
+        upsertFieldsToOmit: _.uniq([
+          ...(this.options.upsertFieldsToOmit || []),
+          ...fields,
+        ]),
+      },
+      this.__resolveVisited,
+    );
+  }
+
   omitFindAll<K extends keyof T>(...fields: K[]) {
-    return new RestfulFactory<T, O, W, C, U, F | K, R>(
+    return new RestfulFactory<T, O, W, C, U, US, F | K, R>(
       this.entityClass,
       {
         ...this.options,
@@ -181,7 +204,7 @@ export class RestfulFactory<
   }
 
   omitOutput<K extends keyof T>(...fields: K[]) {
-    return new RestfulFactory<T, O, W, C, U, F, R | K>(
+    return new RestfulFactory<T, O, W, C, U, US, F, R | K>(
       this.entityClass,
       {
         ...this.options,
@@ -195,7 +218,7 @@ export class RestfulFactory<
   }
 
   pathPrefix(prefix: string) {
-    return new RestfulFactory<T, O, W, C, U, F, R>(
+    return new RestfulFactory<T, O, W, C, U, US, F, R>(
       this.entityClass,
       {
         ...this.options,
@@ -206,7 +229,7 @@ export class RestfulFactory<
   }
 
   keepEntityVersioningDates(enable = true) {
-    return new RestfulFactory<T, O, W, C, U, F, R>(
+    return new RestfulFactory<T, O, W, C, U, US, F, R>(
       this.entityClass,
       {
         ...this.options,
@@ -217,7 +240,7 @@ export class RestfulFactory<
   }
 
   skipNonQueryableFields(enable = true) {
-    return new RestfulFactory<T, O, W, C, U, F, R>(
+    return new RestfulFactory<T, O, W, C, U, US, F, R>(
       this.entityClass,
       {
         ...this.options,
@@ -228,7 +251,7 @@ export class RestfulFactory<
   }
 
   renameEntityClass(name: string) {
-    return new RestfulFactory<T, O, W, C, U, F, R>(
+    return new RestfulFactory<T, O, W, C, U, US, F, R>(
       this.entityClass,
       {
         ...this.options,
@@ -239,7 +262,7 @@ export class RestfulFactory<
   }
 
   useRelations(...relations: (string | RelationDef)[]) {
-    return new RestfulFactory<T, O, W, C, U, F, R>(
+    return new RestfulFactory<T, O, W, C, U, US, F, R>(
       this.entityClass,
       {
         ...this.options,
@@ -300,6 +323,25 @@ export class RestfulFactory<
       PartialType(OmitTypeExclude(this.entityClass, this.fieldsInUpdateToOmit)),
       `Update${this.entityClassName}Dto`,
     ) as ClassType<Omit<T, O | W | U>>;
+  }
+
+  @Memorize()
+  get fieldsInUpsertToOmit() {
+    return _.uniq([
+      ...this.fieldsToOmit,
+      ...(this.options.writeFieldsToOmit || []),
+      ...(this.options.upsertFieldsToOmit || []),
+      ...(getSpecificFields(this.entityClass, 'notWritable') as (keyof T)[]),
+      ...(getSpecificFields(this.entityClass, 'notUpsertable') as (keyof T)[]),
+    ]);
+  }
+
+  @Memorize()
+  get upsertDto() {
+    return RenameClass(
+      OmitTypeExclude(this.entityClass, this.fieldsInUpsertToOmit),
+      `Upsert${this.entityClassName}Dto`,
+    ) as ClassType<Omit<T, O | W | US>>;
   }
 
   @Memorize()
@@ -482,6 +524,25 @@ export class RestfulFactory<
   }
 
   @Memorize()
+  get entityUpsertResultDto() {
+    return RenameClass(
+      OmitType(this.entityResultDto, [
+        ...(this.options.upsertIncludeRelations
+          ? []
+          : getTypeormRelations(this.entityClass).map(
+              (r) => r.propertyName as keyof T,
+            )),
+        ...(getSpecificFields(
+          this.entityClass,
+          'notColumn',
+          (m) => !m.keepInUpsert,
+        ) as any[]),
+      ]),
+      `${this.entityClassName}UpsertResultDto`,
+    ) as ClassType<Omit<T, R>>;
+  }
+
+  @Memorize()
   get entityReturnMessageDto() {
     return ReturnMessageDto(this.entityResultDto);
   }
@@ -542,6 +603,33 @@ export class RestfulFactory<
 
   createParam() {
     return Body(DataPipe(), OmitPipe(this.fieldsInCreateToOmit));
+  }
+
+  isUpsertable() {
+    return !!reflector.get('upsertableEntity', this.entityClass);
+  }
+
+  upsert(extras: ResourceOptions = {}): MethodDecorator {
+    if (!this.isUpsertable()) {
+      throw new Error(
+        `Entity ${this.entityClass.name} is not upsertable. Please define at least one UpsertColumn or BindingColumn, and set @UpsertableEntity() decorator.`,
+      );
+    }
+    return MergeMethodDecorators([
+      this.usePrefix(Put, extras.prefix),
+      HttpCode(200),
+      ApiOperation({
+        summary: `Upsert a ${this.entityClassName}`,
+        ..._.omit(extras, 'prefix'),
+      }),
+      ApiBody({ type: this.upsertDto }),
+      ApiOkResponse({ type: this.entityUpsertResultDto }),
+      ApiError(400, `The ${this.entityClassName} is not valid`),
+    ]);
+  }
+
+  upsertParam() {
+    return Body(DataPipe(), OmitPipe(this.fieldsInUpsertToOmit));
   }
 
   findOne(extras: ResourceOptions = {}): MethodDecorator {
@@ -737,6 +825,7 @@ export class RestfulFactory<
     );
 
     const validMethods = RestfulMethods.filter((m) => {
+      if (m === 'upsert' && !this.isUpsertable()) return false;
       const value = routeOptions?.routes?.[m]?.enabled;
       if (value === false) return false;
       if (value === true) return true;
@@ -783,6 +872,11 @@ export class RestfulFactory<
         paramTypes: [this.idType as AnyClass, this.updateDto],
         paramDecorators: () => [this.idParam(), this.updateParam()],
         methodDecorators: () => [this.update()],
+      },
+      upsert: {
+        paramTypes: [this.upsertDto],
+        paramDecorators: () => [this.upsertParam()],
+        methodDecorators: () => [this.upsert()],
       },
       delete: {
         paramTypes: [this.idType as AnyClass],
@@ -866,9 +960,15 @@ export class RestfulFactory<
   }
 
   crudService(options: CrudOptions<T> = {}) {
+    const keysToMigrate: (keyof (CrudOptions<T> | RestfulFactoryOptions<T>))[] =
+      [
+        'relations',
+        'outputFieldsToOmit',
+        'upsertIncludeRelations',
+        'keepEntityVersioningDates',
+      ];
     return CrudService(this.entityClass, {
-      relations: this.options.relations,
-      outputFieldsToOmit: this.options.outputFieldsToOmit,
+      ..._.pick(this.options, keysToMigrate),
       ...options,
     });
   }

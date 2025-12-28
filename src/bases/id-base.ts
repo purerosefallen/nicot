@@ -12,6 +12,7 @@ import {
 import { IsNotEmpty } from 'class-validator';
 import { MergePropertyDecorators } from 'nesties';
 import { Metadata } from '../utility/metadata';
+import { UpsertColumn } from '../decorators/upsert';
 
 export interface IdOptions {
   description?: string;
@@ -86,6 +87,7 @@ export function StringIdBase(idOptions: StringIdOptions) {
           StringColumn(idOptions.length || 255, columnOptions),
           IsNotEmpty(),
           NotChangeable(),
+          UpsertColumn(),
         ]),
   ];
   const dec = MergePropertyDecorators(decs);

@@ -19,6 +19,9 @@ export interface EntityHooks {
   afterGet(): Promise<void>;
   isValidInUpdate(): string | undefined;
   beforeUpdate(): Promise<void>;
+  isValidInUpsert(): string | undefined;
+  beforeUpsert(): Promise<void>;
+  afterUpsert(): Promise<void>;
 }
 
 export class TimeBase
@@ -65,4 +68,14 @@ export class TimeBase
 
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   async beforeUpdate(): Promise<void> {}
+
+  isValidInUpsert(): string | undefined {
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  async beforeUpsert(): Promise<void> {}
+
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  async afterUpsert(): Promise<void> {}
 }

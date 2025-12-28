@@ -6,10 +6,11 @@ import { GetMutatorOptions } from '../decorators/get-mutator';
 import { BindingValueMetadata } from '../decorators/binding';
 
 interface SpecificFields {
-  notColumn: { keepInCreate?: boolean };
+  notColumn: { keepInCreate?: boolean; keepInUpsert?: boolean };
   notWritable: boolean;
   notCreatable: boolean;
   notChangeable: boolean;
+  notUpsertable: boolean;
   notQueryable: boolean;
   notInResult: { entityVersioningDate?: boolean };
   relationComputed: () => { entityClass: AnyClass; isArray: boolean };
@@ -21,9 +22,12 @@ interface SpecificFields {
   getMutator: GetMutatorOptions;
   bindingColumn: string;
   bindingValue: BindingValueMetadata;
+  upsertColumn: boolean;
 }
 
-type MetadataMap = SpecificFields;
+interface MetadataMap extends SpecificFields {
+  upsertableEntity: boolean;
+}
 
 type FieldsMap = {
   [K in keyof MetadataMap as `${K}Fields`]: string;

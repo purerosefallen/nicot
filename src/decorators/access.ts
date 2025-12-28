@@ -19,6 +19,12 @@ export const NotChangeable = () =>
     Metadata.set('notChangeable', true, 'notChangeableFields'),
   ]);
 
+export const NotUpsertable = () =>
+  MergePropertyDecorators([
+    IsOptional(),
+    Metadata.set('notUpsertable', true, 'notUpsertableFields'),
+  ]);
+
 export const NotQueryable = () =>
   Metadata.set('notQueryable', true, 'notQueryableFields');
 

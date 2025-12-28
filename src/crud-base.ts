@@ -20,7 +20,7 @@ import {
   PageSettingsFactory,
   QueryWise,
 } from './bases';
-import { ConsoleLogger } from '@nestjs/common';
+import { ConsoleLogger, HttpException } from '@nestjs/common';
 import { camelCase } from 'typeorm/util/StringUtils';
 import _, { omit } from 'lodash';
 import {
@@ -71,6 +71,7 @@ export interface CrudOptions<T extends ValidCrudEntity<T>> {
   createOrUpdate?: boolean;
   keepEntityVersioningDates?: boolean;
   outputFieldsToOmit?: (keyof T)[];
+  upsertIncludeRelations?: boolean;
 }
 
 const loadedParsers = new Set<string>();
@@ -396,7 +397,10 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     });
   }
 
-  async create(_ent: T, beforeCreate?: (repo: Repository<T>) => Promise<void>) {
+  async create(
+    _ent: Partial<T>,
+    beforeCreate?: (repo: Repository<T>) => Promise<void>,
+  ) {
     const bindingEnt = await this.getBindingPartialEntity();
     if (!_ent) {
       throw new BlankReturnMessageDto(400, 'Invalid entity').toException();
@@ -685,6 +689,114 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     return new BlankReturnMessageDto(200, 'success');
   }
 
+  async upsert(_ent: Partial<T>) {
+    const bindingEnt = await this.getBindingPartialEntity();
+    if (!_ent) {
+      throw new BlankReturnMessageDto(400, 'Invalid entity').toException();
+    }
+    const ent = new this.entityClass();
+    Object.assign(
+      ent,
+      omit(_ent, ...this._typeormRelations.map((r) => r.propertyName)),
+    );
+    const invalidReason = ent.isValidInUpsert();
+    if (invalidReason) {
+      throw new BlankReturnMessageDto(400, invalidReason).toException();
+    }
+    const upsertColumns = getSpecificFields(this.entityClass, 'upsertColumn');
+    const conditions = {
+      ...(_.pick(ent, upsertColumns) as Partial<T>),
+      ...bindingEnt,
+    };
+    const conditionKeys = [
+      ...new Set([
+        ...getSpecificFields(this.entityClass, 'bindingColumn'),
+        ...upsertColumns,
+      ]),
+    ];
+    Object.assign(ent, conditions);
+    let deleteColumnProperty = '';
+    if (!this.crudOptions.hardDelete) {
+      const deleteColumn = this.repo.manager.connection.getMetadata(
+        this.entityClass,
+      ).deleteDateColumn;
+      if (deleteColumn) {
+        (ent as any)[deleteColumn.propertyName] = null;
+        deleteColumnProperty = deleteColumn.propertyName;
+      }
+    }
+    await ent.beforeUpsert?.();
+    try {
+      const savedEnt = await this._mayBeTransaction(async (mdb, repo) => {
+        const res = await repo.upsert(ent, {
+          conflictPaths: conditionKeys,
+        });
+        const insertedId = (res.identifiers[0] as any)?.id;
+        const fetchSaved = () => {
+          const qb = repo.createQueryBuilder(this.entityAliasName);
+          if (insertedId != null) {
+            qb.where(`${this.entityAliasName}.id = :id`, { id: insertedId });
+          } else {
+            conditionKeys.forEach((key, i) => {
+              const paramKey = `_cond_${key}`;
+              qb[i === 0 ? 'where' : 'andWhere'](
+                `${this.entityAliasName}.${key} = :${paramKey}`,
+                {
+                  [paramKey]: (conditions as any)[key],
+                },
+              );
+            });
+          }
+          qb.take(1);
+          if (deleteColumnProperty) {
+            qb.withDeleted();
+          }
+          if (this.crudOptions.upsertIncludeRelations) {
+            this._applyQueryRelations(qb);
+          }
+          return qb.getOne();
+        };
+        let saved = await fetchSaved();
+        if (!saved) {
+          this.log.error(
+            `Failed to upsert entity ${JSON.stringify(
+              ent,
+            )}: cannot find saved entity after upsert.`,
+          );
+          throw new BlankReturnMessageDto(500, 'Internal error').toException();
+        }
+        if (deleteColumnProperty && (saved as any)[deleteColumnProperty]) {
+          // it was not successfully restored, do it again
+          await repo.restore(insertedId ? { id: insertedId } : conditions);
+          saved = await fetchSaved();
+          if (!saved || (saved as any)[deleteColumnProperty]) {
+            this.log.error(
+              `Failed to upsert entity ${JSON.stringify(
+                ent,
+              )}: cannot restore soft-deleted entity after upsert.`,
+            );
+            throw new BlankReturnMessageDto(
+              500,
+              'Internal error',
+            ).toException();
+          }
+        }
+        return saved;
+      });
+      await savedEnt.afterUpsert?.();
+      this.cleanEntityNotInResultFields(savedEnt);
+      return new this.entityReturnMessageDto(200, 'success', savedEnt);
+    } catch (e) {
+      if (e instanceof HttpException) {
+        throw e;
+      }
+      this.log.error(
+        `Failed to upsert entity ${JSON.stringify(ent)}: ${e.toString()}`,
+      );
+      throw new BlankReturnMessageDto(500, 'Internal error').toException();
+    }
+  }
+
   async delete(id: EntityId<T>, cond: FindOptionsWhere<T> = {}) {
     const bindingEnt = await this.getBindingPartialEntity();
     let result: UpdateResult | DeleteResult;
@@ -713,7 +825,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
   }
 
   async importEntities(
-    _ents: T[],
+    _ents: Partial<T>[],
     extraChecking?: (ent: T) => string | Promise<string>,
   ) {
     const bindingEnt = await this.getBindingPartialEntity();
