@@ -42,7 +42,6 @@ import PQueue from 'p-queue';
 import { RelationDef } from './utility/relation-def';
 import { filterRelations } from './utility/filter-relations';
 import { BindingValueMetadata, DefaultBindingKey } from './decorators';
-import { observeDiff } from 'nfkit';
 
 export type EntityId<T extends { id: any }> = T['id'];
 type BindingSnapshot = Record<string, any>;
