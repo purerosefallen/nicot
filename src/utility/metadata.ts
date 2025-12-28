@@ -4,6 +4,7 @@ import { AnyClass } from 'nesties';
 import { QueryFullTextColumnOptions } from './query-full-text-column-options.interface';
 import { GetMutatorOptions } from '../decorators/get-mutator';
 import { BindingValueMetadata } from '../decorators/binding';
+import _ from 'lodash';
 
 interface SpecificFields {
   notColumn: { keepInCreate?: boolean; hideInUpsert?: boolean };
@@ -12,7 +13,8 @@ interface SpecificFields {
   notChangeable: boolean;
   notUpsertable: boolean;
   notQueryable: boolean;
-  notInResult: { entityVersioningDate?: boolean };
+  notInResult: boolean;
+  entityVersioningDate: boolean;
   relationComputed: () => { entityClass: AnyClass; isArray: boolean };
   queryFullTextColumn: QueryFullTextColumnOptions;
   // boolColumn: boolean;
@@ -56,9 +58,9 @@ export function getNotInResultFields(
   obj: any,
   keepEntityVersioningDates = false,
 ) {
-  return getSpecificFields(
-    obj,
-    'notInResult',
-    (meta) => !keepEntityVersioningDates || !meta.entityVersioningDate,
-  );
+  const res = getSpecificFields(obj, 'notInResult');
+  if (keepEntityVersioningDates) {
+    return _.difference(res, getSpecificFields(obj, 'entityVersioningDate'));
+  }
+  return res;
 }

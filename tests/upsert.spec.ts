@@ -398,6 +398,7 @@ describe('upsert', () => {
     const deletedRow = await singleSvc.repo.findOne({
       where: { id: id1 } as any,
       withDeleted: true,
+      select: ['id', 'deleteTime'],
     });
     expect(deletedRow).toBeTruthy();
     expect((deletedRow as any).deleteTime).toBeTruthy();
@@ -416,6 +417,7 @@ describe('upsert', () => {
     // 5) verify in DB: not deleted
     const alive = await singleSvc.repo.findOne({
       where: { id: id1 } as any,
+      select: ['id', 'deleteTime'],
     });
     expect(alive).toBeTruthy();
     expect((alive as any).deleteTime).toBeNull();

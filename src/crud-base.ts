@@ -525,6 +525,18 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     }
   }
 
+  _applyQueryKeepEntityVersioningDates(qb: SelectQueryBuilder<T>) {
+    if (this.crudOptions.keepEntityVersioningDates) {
+      const versioningDateFields = getSpecificFields(
+        this.entityClass,
+        'entityVersioningDate',
+      );
+      for (const field of versioningDateFields) {
+        qb.addSelect(`${this.entityAliasName}.${field}`);
+      }
+    }
+  }
+
   async findOne(
     id: EntityId<T>,
     // eslint-disable-next-line @typescript-eslint/no-empty-function
@@ -536,6 +548,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       .take(1);
     this._applyQueryRelations(query);
     this._applyQueryFromBinding(bindingEnt, query);
+    this._applyQueryKeepEntityVersioningDates(query);
     this.extraGetQuery(query);
     extraQuery(query);
     query.take(1);
@@ -581,6 +594,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     this._applyQueryRelations(query);
     this._applyQueryFilters(query, newEnt);
     this._applyQueryFromBinding(bindingEnt, query);
+    this._applyQueryKeepEntityVersioningDates(query);
     const pageSettings =
       newEnt instanceof PageSettingsDto
         ? newEnt
@@ -749,8 +763,12 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
           }
           qb.take(1);
           if (deleteColumnProperty) {
+            if (!this.crudOptions.keepEntityVersioningDates) {
+              qb.addSelect(`${this.entityAliasName}.${deleteColumnProperty}`);
+            }
             qb.withDeleted();
           }
+          this._applyQueryKeepEntityVersioningDates(qb);
           if (this.crudOptions.upsertIncludeRelations) {
             this._applyQueryRelations(qb);
           }

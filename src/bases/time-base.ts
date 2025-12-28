@@ -6,6 +6,7 @@ import {
 } from 'typeorm';
 import { NotColumn, NotInResult } from '../decorators';
 import { PageSettingsDto } from './page-settings';
+import { Metadata } from '../utility/metadata';
 
 export interface DeletionWise {
   deleteTime?: Date;
@@ -24,25 +25,31 @@ export interface EntityHooks {
   afterUpsert(): Promise<void>;
 }
 
+const EntityVersioningDate = () =>
+  Metadata.set('entityVersioningDate', true, 'entityVersioningDateFields');
+
 export class TimeBase
   extends PageSettingsDto
   implements DeletionWise, EntityHooks
 {
-  @CreateDateColumn()
+  @CreateDateColumn({ select: false })
   @NotColumn()
-  @NotInResult({ entityVersioningDate: true })
+  @NotInResult()
+  @EntityVersioningDate()
   @Reflect.metadata('design:type', Date)
   createTime: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ select: false })
   @NotColumn()
-  @NotInResult({ entityVersioningDate: true })
+  @NotInResult()
+  @EntityVersioningDate()
   @Reflect.metadata('design:type', Date)
   updateTime: Date;
 
-  @DeleteDateColumn()
+  @DeleteDateColumn({ select: false })
   @NotColumn()
-  @NotInResult({ entityVersioningDate: true })
+  @NotInResult()
+  @EntityVersioningDate()
   @Reflect.metadata('design:type', Date)
   deleteTime: Date;
 
