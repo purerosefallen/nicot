@@ -6,6 +6,7 @@ import {
 import {
   DeepPartial,
   DeleteResult,
+  EntityManager,
   FindOneOptions,
   FindOptionsWhere,
   In,
@@ -269,15 +270,27 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     return res;
   }
 
+  async _mayBeTransaction<R>(
+    cb: (tdb: EntityManager, repo: Repository<T>) => Awaitable<R>,
+    manager = this.repo.manager,
+  ) {
+    const hasActiveTx = !!manager.queryRunner?.isTransactionActive;
+    const getRepo = (m: EntityManager) => m.getRepository(this.entityClass);
+    if (hasActiveTx) {
+      return cb(manager, getRepo(manager));
+    } else {
+      return manager.transaction(async (tdb) => await cb(tdb, getRepo(tdb)));
+    }
+  }
+
   async _batchCreate(
     ents: T[],
     beforeCreate?: (repo: Repository<T>) => Promise<void>,
     skipErrors = false,
   ) {
     const entsWithId = ents.filter((ent) => ent.id != null);
-    return this.repo.manager.transaction(async (mdb) => {
+    return this._mayBeTransaction(async (mdb, repo) => {
       let skipped: { result: string; entry: T }[] = [];
-      const repo = mdb.getRepository(this.entityClass);
 
       let entsToSave = ents;
 
@@ -398,8 +411,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     if (invalidReason) {
       throw new BlankReturnMessageDto(400, invalidReason).toException();
     }
-    const savedEnt = await this.repo.manager.transaction(async (mdb) => {
-      const repo = mdb.getRepository(this.entityClass);
+    const savedEnt = await this._mayBeTransaction(async (mdb, repo) => {
       if (ent.id != null) {
         const existingEnt = await repo.findOne({
           where: { id: ent.id },
@@ -951,15 +963,10 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       return result;
     };
 
-    const hasActiveTx = !!this.repo.manager.queryRunner?.isTransactionActive;
-
-    const res = await (options.repo
-      ? op(options.repo)
-      : hasActiveTx
-      ? op(this.repo)
-      : this.repo.manager.transaction((tdb) =>
-          op(tdb.getRepository(this.entityClass)),
-        ));
+    const res = await this._mayBeTransaction(
+      (tdb, repo) => op(repo),
+      options.repo?.manager || this.repo.manager,
+    );
 
     return res == null
       ? new BlankReturnMessageDto(200, 'success')
