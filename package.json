@@ -1,7 +1,7 @@
 {
   "name": "nicot",
   "description": "Nest.js interacting with class-validator + OpenAPI + TypeORM for Nest.js Restful API development.",
-  "version": "1.2.13",
+  "version": "1.3.0",
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
