@@ -785,6 +785,7 @@ export class RestfulFactory<
           Partial<{
             enabled: boolean;
             methodDecorators: MethodDecorator[];
+            options: ResourceOptions;
           }>
         >
       >;
@@ -837,13 +838,13 @@ export class RestfulFactory<
       {
         paramDecorators: () => ParameterDecorator[];
         paramTypes: AnyClass[];
-        methodDecorators: () => MethodDecorator[];
+        methodDecorators: (o: ResourceOptions) => MethodDecorator[];
       }
     > = {
       findOne: {
         paramTypes: [this.idType as AnyClass],
         paramDecorators: () => [this.idParam()],
-        methodDecorators: () => [this.findOne()],
+        methodDecorators: (o) => [this.findOne(o)],
       },
       findAll: {
         paramTypes: [
@@ -857,36 +858,36 @@ export class RestfulFactory<
             : this.findAllDto,
         ],
         paramDecorators: () => [this.findAllParam()],
-        methodDecorators: () => [
+        methodDecorators: (o) => [
           routeOptions.paginateType === 'cursor'
-            ? this.findAllCursorPaginated()
-            : this.findAll(),
+            ? this.findAllCursorPaginated(o)
+            : this.findAll(o),
         ],
       },
       create: {
         paramTypes: [this.createDto],
         paramDecorators: () => [this.createParam()],
-        methodDecorators: () => [this.create()],
+        methodDecorators: (o) => [this.create(o)],
       },
       update: {
         paramTypes: [this.idType as AnyClass, this.updateDto],
         paramDecorators: () => [this.idParam(), this.updateParam()],
-        methodDecorators: () => [this.update()],
+        methodDecorators: (o) => [this.update(o)],
       },
       upsert: {
         paramTypes: [this.upsertDto],
         paramDecorators: () => [this.upsertParam()],
-        methodDecorators: () => [this.upsert()],
+        methodDecorators: (o) => [this.upsert(o)],
       },
       delete: {
         paramTypes: [this.idType as AnyClass],
         paramDecorators: () => [this.idParam()],
-        methodDecorators: () => [this.delete()],
+        methodDecorators: (o) => [this.delete(o)],
       },
       import: {
         paramTypes: [this.importDto],
         paramDecorators: () => [this.createParam()],
-        methodDecorators: () => [this.import()],
+        methodDecorators: (o) => [this.import(o)],
       },
     };
 
@@ -904,7 +905,9 @@ export class RestfulFactory<
       const paramDecorators = useDecorators[method].paramDecorators();
       const paramTypes = useDecorators[method].paramTypes;
       const methodDecorators = [
-        ...useDecorators[method].methodDecorators(),
+        ...useDecorators[method].methodDecorators(
+          routeOptions?.routes?.[method]?.options || {},
+        ),
         ...(routeOptions?.routes?.[method]?.methodDecorators || []),
         ...(routeOptions?.globalMethodDecorators || []),
       ];
