@@ -4,7 +4,7 @@ import { QueryFullTextColumnOptions } from '../utility/query-full-text-column-op
 import { MergePropertyDecorators } from 'nesties';
 import { unshiftOrderBy } from '../utility/unshift-order-by';
 import { addSubject } from '../utility/subject-registry';
-import { parseBool } from '../utility/parse-bool';
+import { parseBool } from 'nesties';
 import { Brackets, SelectQueryBuilder } from 'typeorm';
 
 export const QueryCondition = (cond: QueryCond) =>

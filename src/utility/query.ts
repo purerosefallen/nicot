@@ -1,5 +1,5 @@
 import { SelectQueryBuilder } from 'typeorm';
-import { parseBool } from './parse-bool';
+import { parseBool } from 'nesties';
 
 export function createQueryCondition(
   cond: <T>(

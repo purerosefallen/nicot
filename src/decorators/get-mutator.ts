@@ -1,6 +1,6 @@
 import { ApiPropertyOptions } from '@nestjs/swagger';
 import { Metadata } from '../utility/metadata';
-import { parseBool } from '../utility/parse-bool';
+import { parseBool } from 'nesties';
 
 export interface GetMutatorOptions {
   mutator: (s: string) => any;

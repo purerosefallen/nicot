@@ -37,7 +37,7 @@ import {
   NotQueryable,
   NotWritable,
 } from './access';
-import { parseBool } from '../utility/parse-bool';
+import { parseBool } from 'nesties';
 import { ColumnUnsignedOptions } from 'typeorm/decorator/options/ColumnUnsignedOptions';
 import { GetMutatorBool, RequireGetMutator } from './get-mutator';
 
