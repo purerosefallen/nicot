@@ -642,7 +642,7 @@ export class RestfulFactory<
       ApiParam({ name: 'id', type: this.idType, required: true }),
       ApiOkResponse({ type: this.entityReturnMessageDto }),
       ApiError(
-        400,
+        404,
         `The ${this.entityClassName} with the given id was not found`,
       ),
     ]);
