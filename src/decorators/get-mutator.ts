@@ -3,7 +3,7 @@ import { Metadata } from '../utility/metadata';
 import { parseBool } from 'nesties';
 
 export interface GetMutatorOptions {
-  mutator: (s: string) => any;
+  mutator: (s: string, k: string, o: any) => any;
   enum?: string[];
   example?: string;
   apiPropertyExtras?: ApiPropertyOptions;

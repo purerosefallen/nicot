@@ -19,7 +19,7 @@ export class MutatorPipe implements PipeTransform {
         continue;
       }
       const mutator = reflector.get('getMutator', this.entityClass, field);
-      newObj[field] = mutator.mutator(v);
+      newObj[field] = mutator.mutator(v, field, obj);
     }
     return newObj;
   }
