@@ -26,6 +26,7 @@ export class CursorPaginationDto {
   })
   @NotInResult()
   @QueryManual()
+  @Reflect.metadata('design:type', String)
   paginationCursor: string;
 
   @NotWritable()
@@ -39,6 +40,7 @@ export class CursorPaginationDto {
   })
   @NotInResult()
   @QueryManual()
+  @Reflect.metadata('design:type', Number)
   recordsPerPage: number;
 }
 
@@ -56,6 +58,7 @@ export class BlankCursorPaginationReturnMessageDto
     required: false,
     type: String,
   })
+  @Reflect.metadata('design:type', String)
   nextCursor?: string;
 
   @ApiProperty({
@@ -63,6 +66,7 @@ export class BlankCursorPaginationReturnMessageDto
     required: false,
     type: String,
   })
+  @Reflect.metadata('design:type', String)
   previousCursor?: string;
 
   constructor(

@@ -770,7 +770,7 @@ export class RestfulFactory<
         : ApiBlankResponse(),
       ApiError(
         404,
-        `The ${this.entityClassName} with the given id was not found`,
+        `The ${this.entityClassName} with the given id pessimistic_write`,
       ),
     ]);
   }
