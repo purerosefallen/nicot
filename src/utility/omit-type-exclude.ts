@@ -1,4 +1,4 @@
-import { OmitType } from '@nestjs/swagger';
+import { OmitType, PickType } from '@nestjs/swagger';
 import { Exclude, Expose } from 'class-transformer';
 import { ClassType } from 'nesties';
 
@@ -17,10 +17,7 @@ export const PickTypeExpose = <T, K extends keyof T>(
   cl: ClassType<T>,
   keys: readonly K[],
 ) => {
-  const picked = OmitType(
-    cl,
-    Object.keys(cl.prototype).filter((k) => !keys.includes(k as K)) as K[],
-  );
+  const picked = PickType(cl, keys);
   for (const key of keys) {
     Expose()(picked.prototype, key as any);
   }

@@ -33,6 +33,7 @@ import {
   IntersectionType,
   OmitType,
   PartialType,
+  PickType,
 } from '@nestjs/swagger';
 import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import _, { upperFirst } from 'lodash';
@@ -392,7 +393,7 @@ export class RestfulFactory<
       ),
     ) as ClassType<T>;
     if (this.options.skipNonQueryableFields) {
-      cl = PickTypeExpose(cl, this.queryableFields) as ClassType<T>;
+      cl = PickType(cl, this.queryableFields) as ClassType<T>;
     }
     return RenameClass(cl, `Find${this.entityClassName}Dto`) as ClassType<
       Omit<T, O | F>
