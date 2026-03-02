@@ -410,7 +410,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       ent,
       omit(_ent, ...this._typeormRelations.map((r) => r.propertyName)),
     );
-    const invalidReason = ent.isValidInCreate();
+    const invalidReason = ent.isValidInCreate?.();
     if (invalidReason) {
       throw new BlankReturnMessageDto(400, invalidReason).toException();
     }
@@ -672,7 +672,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     let result: UpdateResult;
     const ent = new this.entityClass();
     Object.assign(ent, entPart);
-    const invalidReason = ent.isValidInUpdate();
+    const invalidReason = ent.isValidInUpdate?.();
     if (invalidReason) {
       throw new BlankReturnMessageDto(400, invalidReason).toException();
     }
@@ -713,7 +713,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       ent,
       omit(_ent, ...this._typeormRelations.map((r) => r.propertyName)),
     );
-    const invalidReason = ent.isValidInUpsert();
+    const invalidReason = ent.isValidInUpsert?.();
     if (invalidReason) {
       throw new BlankReturnMessageDto(400, invalidReason).toException();
     }
@@ -858,7 +858,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     const invalidResults = _.compact(
       await Promise.all(
         ents.map(async (ent) => {
-          const reason = ent.isValidInCreate();
+          const reason = ent.isValidInCreate?.();
           if (reason) {
             return { entry: ent, result: reason };
           }
