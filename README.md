@@ -52,6 +52,22 @@ NICOT targets:
 - NestJS ^9 / ^10 / ^11  
 - TypeORM ^0.3.x
 
+## Testing
+
+The test suite expects PostgreSQL on `localhost:5432` with:
+
+- username: `postgres`
+- password: `postgres`
+- database: `postgres`
+
+Bring up the test database with:
+
+```bash
+docker compose -f tests/docker-compose.yml up -d
+```
+
+This project's full-text tests use `@QueryFullText({ parser: 'zhparser' })`, so the test compose uses `zhparser/zhparser:bookworm-16` instead of the plain `postgres` image.
+
 ---
 
 ## Quick Start

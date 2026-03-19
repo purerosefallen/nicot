@@ -16,6 +16,25 @@ NICOT 是一个 *Entity-Driven* 的全自动 REST 后端框架。
 
 ---
 
+## 测试
+
+当前测试默认连接本机 PostgreSQL：
+
+- 地址：`localhost:5432`
+- 用户名：`postgres`
+- 密码：`postgres`
+- 数据库：`postgres`
+
+可以直接用项目内的测试 compose 启动：
+
+```bash
+docker compose -f tests/docker-compose.yml up -d
+```
+
+由于 `tests/fulltext.spec.ts` 会使用 `@QueryFullText({ parser: 'zhparser' })`，这里不是普通 `postgres` 镜像，而是带 `zhparser` 扩展的 `zhparser/zhparser:bookworm-16`。
+
+---
+
 ## 快速示例
 
 ```ts
