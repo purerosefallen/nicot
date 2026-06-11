@@ -2,7 +2,7 @@ import { ColumnCommonOptions } from 'typeorm/decorator/options/ColumnCommonOptio
 import { ApiProperty, ApiPropertyOptions } from '@nestjs/swagger';
 import { ColumnWithLengthOptions } from 'typeorm/decorator/options/ColumnWithLengthOptions';
 import { AnyClass, MergePropertyDecorators } from 'nesties';
-import { Column, Index } from 'typeorm';
+import { Column, ColumnOptions, Index } from 'typeorm';
 import {
   IsDate,
   IsEnum,
@@ -239,11 +239,12 @@ export const FloatColumn = (
     }
   }
   return MergePropertyDecorators([
-    Column(type, {
+    Column({
+      type,
       default: options.default,
       unsigned: options.unsigned,
       ...columnDecoratorOptions(options),
-    }),
+    } as ColumnOptions),
     IsNumber(),
     ...(min > Number.MIN_SAFE_INTEGER ? [Min(min)] : []),
     ...(max < Number.MAX_SAFE_INTEGER ? [Max(max)] : []),
