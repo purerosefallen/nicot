@@ -6,6 +6,7 @@ import { unshiftOrderBy } from '../utility/unshift-order-by';
 import { addSubject } from '../utility/subject-registry';
 import { parseBool } from 'nesties';
 import { Brackets, SelectQueryBuilder } from 'typeorm';
+import { binaryToBuffer, isBinaryLike } from '../utility/base64-binary';
 
 export const QueryCondition = (cond: QueryCond) =>
   Metadata.set(
@@ -168,6 +169,33 @@ export const createQueryOperatorArrayify = (
 
 export const QueryIn = createQueryOperatorArrayify('IN', '=');
 export const QueryNotIn = createQueryOperatorArrayify('NOT IN', '!=');
+
+const toBase64QueryBuffer = (value: unknown): Buffer | unknown => {
+  if (value == null) {
+    return value;
+  }
+  if (isBinaryLike(value)) {
+    return binaryToBuffer(value);
+  }
+  return Buffer.from(String(value), 'base64');
+};
+
+/**
+ * Builds a query condition for a `Base64BinaryColumn`. The incoming base64
+ * string (the API-facing form) is decoded into a `Buffer` right before it is
+ * bound as a query parameter, so it can be compared against the raw binary
+ * stored in the database. A value that is already binary
+ * (Buffer / Uint8Array / ArrayBuffer) is used as-is.
+ */
+export const createQueryBase64Operator =
+  (operator: string) => (field?: string) =>
+    QueryWrap((entityExpr, varExpr, info) => {
+      info.mutateValue(toBase64QueryBuffer(info.value));
+      return `${entityExpr} ${operator} ${varExpr}`;
+    }, field);
+
+export const QueryBase64Equal = createQueryBase64Operator('=');
+export const QueryBase64NotEqual = createQueryBase64Operator('!=');
 
 export const QueryFullText = (options: QueryFullTextColumnOptions = {}) => {
   const configurationName = options.parser

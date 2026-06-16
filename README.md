@@ -289,6 +289,7 @@ Common ones:
 | `@SimpleJsonColumn`  | `json`             | same as above               |
 | `@StringJsonColumn`  | `text` (stringified JSON) | same as above       |
 | `@EnumColumn(Enum)`  | enum or text       | enum validation             |
+| `@Base64BinaryColumn()` | `bytea` (binary)| base64 string / binary      |
 
 All of them accept an `options` parameter:
 
@@ -299,6 +300,46 @@ All of them accept an `options` parameter:
   default: 'Anonymous',
 })
 displayName: string;
+```
+
+### `@Base64BinaryColumn()` — base64 over the wire, binary in the database
+
+`@Base64BinaryColumn()` lets you store **raw binary** in the database while the
+entity / DTO / OpenAPI surface all behave like a plain **base64 `string`**:
+
+- The TS property type is `string` (a base64 string).
+- It is exposed to OpenAPI as `{ type: String, format: 'byte' }`.
+- A TypeORM `ValueTransformer` decodes the base64 string into a `Buffer` on the
+  way into the DB (`bytea` by default) and encodes it back to base64 on read.
+
+```ts
+@Entity()
+export class Attachment extends IdBase() {
+  @Base64BinaryColumn({ required: true })
+  data: string; // base64 in the API, bytea in PostgreSQL
+
+  // MySQL? pick a blob type:
+  @Base64BinaryColumn({ columnType: 'longblob' })
+  thumbnail: string;
+}
+```
+
+**Assigning raw binary directly.** Even though the type is a base64 `string`,
+if you assign a `Buffer` / `Uint8Array` / `ArrayBuffer` (e.g. from `repo.save`
+in your own code), it is treated as *the binary itself* and stored as-is —
+validation accepts it too. It still comes back out as a base64 string over the
+API.
+
+**Querying.** A base64 binary column is a normal queryable field (no
+`GetMutator` required). To filter on it in `findAll`, attach
+`@QueryBase64Equal()` (or `@QueryBase64NotEqual()`); the incoming base64 query
+string is decoded to a `Buffer` right before it is bound, so it matches the
+binary stored in the column:
+
+```ts
+@Base64BinaryColumn()
+@QueryBase64Equal()
+signature: string; // GET /attachment?signature=3q2+7w==
 ```
 
 ---

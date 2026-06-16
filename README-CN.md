@@ -192,10 +192,50 @@ content: string;
 | QueryGreater/Less   | 数值比较              |
 | QueryIn / QueryNotIn| IN / NOT IN           |
 | QueryMatchBoolean   | 自动解析 true/false   |
+| QueryBase64Equal / QueryBase64NotEqual | base64 字符串解码为二进制后比较（配合 `@Base64BinaryColumn()`） |
 | QueryOperator       | 自定义操作符          |
 | QueryWrap           | 自定义表达式          |
 | QueryAnd / QueryOr  | 条件组合              |
 | QueryFullText       | PostgreSQL 全文搜索   |
+
+---
+
+## Base64 二进制列：`@Base64BinaryColumn()`
+
+`@Base64BinaryColumn()` 让你在**数据库里存原始二进制**，而在 实体 / DTO /
+OpenAPI 层面统统“伪装成”一个普通的 base64 `string` 字段：
+
+- 实体属性类型是 `string`（base64 字符串）。
+- OpenAPI 中以 `{ type: String, format: 'byte' }` 展示。
+- 通过 TypeORM `ValueTransformer`：写库时把 base64 字符串解码成 `Buffer`
+  （默认列类型 `bytea`），读取时再编码回 base64 字符串。
+
+```ts
+@Entity()
+export class Attachment extends IdBase() {
+  @Base64BinaryColumn({ required: true })
+  data: string; // 接口里是 base64，PostgreSQL 里是 bytea
+
+  // MySQL 可指定 blob 系列类型：
+  @Base64BinaryColumn({ columnType: 'longblob' })
+  thumbnail: string;
+}
+```
+
+**直接赋二进制也合法。** 虽然类型是 base64 `string`，但如果在你自己的代码里
+（例如 `repo.save`）直接赋了 `Buffer` / `Uint8Array` / `ArrayBuffer`，会被认为
+“这就是那段二进制”原样入库，校验同样通过；读出来时依然是 base64 字符串。
+
+**查询。** base64 二进制列本身就是可查询字段（不需要 `GetMutator`）。想在
+`findAll` 中按它过滤，给它挂上 `@QueryBase64Equal()`（或
+`@QueryBase64NotEqual()`）即可：传入的 base64 查询串会在绑定参数前被解码成
+`Buffer`，从而与列里存的二进制匹配。
+
+```ts
+@Base64BinaryColumn()
+@QueryBase64Equal()
+signature: string; // GET /attachment?signature=3q2+7w==
+```
 
 ---
 
