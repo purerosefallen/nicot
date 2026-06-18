@@ -84,10 +84,10 @@ class BinaryFileController {
   }
 }
 
-const HELLO = 'hello world';
-const HELLO_B64 = Buffer.from(HELLO).toString('base64');
 const BYE = 'goodbye world';
 const BYE_B64 = Buffer.from(BYE).toString('base64');
+const WEIRD = Buffer.from([0x00, 0xff, 0x80, 0x41, 0xef, 0xbf, 0xbd, 0x04]);
+const WEIRD_B64 = WEIRD.toString('base64');
 const SIG = Buffer.from([0xde, 0xad, 0xbe, 0xef]);
 const SIG_B64 = SIG.toString('base64');
 
@@ -119,7 +119,7 @@ describe('Base64BinaryColumn CRUD e2e (supertest)', () => {
     await app.init();
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await app.close();
   });
 
@@ -131,13 +131,13 @@ describe('Base64BinaryColumn CRUD e2e (supertest)', () => {
     // ---- CREATE ----
     const created = await request(server)
       .post('/binary-file')
-      .send({ name: 'file-1', data: HELLO_B64, signature: SIG_B64 })
+      .send({ name: 'file-1', data: WEIRD_B64, signature: SIG_B64 })
       .expect(200)
       .expect((res) => {
         expect(res.body.success).toBe(true);
         expect(res.body.data.id).toBeDefined();
         // API round-trips base64 strings.
-        expect(res.body.data.data).toBe(HELLO_B64);
+        expect(res.body.data.data).toBe(WEIRD_B64);
         expect(res.body.data.signature).toBe(SIG_B64);
       });
 
@@ -149,7 +149,7 @@ describe('Base64BinaryColumn CRUD e2e (supertest)', () => {
       [id],
     );
     expect(Buffer.isBuffer(rawRows[0].data)).toBe(true);
-    expect((rawRows[0].data as Buffer).toString()).toBe(HELLO);
+    expect((rawRows[0].data as Buffer).equals(WEIRD)).toBe(true);
     expect((rawRows[0].signature as Buffer).equals(SIG)).toBe(true);
 
     // ---- READ one ----
@@ -158,7 +158,7 @@ describe('Base64BinaryColumn CRUD e2e (supertest)', () => {
       .expect(200)
       .expect((res) => {
         expect(res.body.success).toBe(true);
-        expect(res.body.data.data).toBe(HELLO_B64);
+        expect(res.body.data.data).toBe(WEIRD_B64);
         expect(res.body.data.signature).toBe(SIG_B64);
       });
 
@@ -169,7 +169,7 @@ describe('Base64BinaryColumn CRUD e2e (supertest)', () => {
       .expect((res) => {
         expect(res.body.success).toBe(true);
         expect(res.body.data).toHaveLength(1);
-        expect(res.body.data[0].data).toBe(HELLO_B64);
+        expect(res.body.data[0].data).toBe(WEIRD_B64);
       });
 
     // ---- QUERY by base64 signature (QueryBase64Equal) ----
@@ -223,7 +223,7 @@ describe('Base64BinaryColumn CRUD e2e (supertest)', () => {
     // Assign the actual binary (Buffer) instead of its base64 form.
     const ent = repo.create({
       name: 'raw-buffer',
-      data: Buffer.from(HELLO) as unknown as string,
+      data: WEIRD as unknown as string,
       signature: new Uint8Array(SIG) as unknown as string,
     });
     const saved = await repo.save(ent);
@@ -234,7 +234,7 @@ describe('Base64BinaryColumn CRUD e2e (supertest)', () => {
       .expect(200)
       .expect((res) => {
         // It comes back out as base64 over the API.
-        expect(res.body.data.data).toBe(HELLO_B64);
+        expect(res.body.data.data).toBe(WEIRD_B64);
         expect(res.body.data.signature).toBe(SIG_B64);
       });
   });

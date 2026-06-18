@@ -45,6 +45,7 @@ import { parseBool } from 'nesties';
 import { ColumnUnsignedOptions } from 'typeorm/decorator/options/ColumnUnsignedOptions';
 import { GetMutatorBool, RequireGetMutator } from './get-mutator';
 import {
+  Base64BinaryStorage,
   Base64BinaryTransformer,
   isBinaryLike,
 } from '../utility/base64-binary';
@@ -392,13 +393,19 @@ export const IsBase64OrBinary = (
 export const Base64BinaryColumn = (
   options: PropertyOptions<string> & {
     columnType?: SimpleColumnType | WithLengthColumnType;
+    binaryStorage?: Base64BinaryStorage;
   } = {},
 ): PropertyDecorator =>
   MergePropertyDecorators([
     Column((options.columnType || 'bytea') as SimpleColumnType, {
       ...columnDecoratorOptions(options),
       default: undefined,
-      transformer: new Base64BinaryTransformer(),
+      transformer: new Base64BinaryTransformer(
+        options.binaryStorage ??
+          (options.columnType && options.columnType !== 'bytea'
+            ? 'binary'
+            : 'postgres-bytea'),
+      ),
     }),
     IsBase64OrBinary(),
     validatorDecorator(options),

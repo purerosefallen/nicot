@@ -309,8 +309,9 @@ entity / DTO / OpenAPI surface all behave like a plain **base64 `string`**:
 
 - The TS property type is `string` (a base64 string).
 - It is exposed to OpenAPI as `{ type: String, format: 'byte' }`.
-- A TypeORM `ValueTransformer` decodes the base64 string into a `Buffer` on the
-  way into the DB (`bytea` by default) and encodes it back to base64 on read.
+- A TypeORM `ValueTransformer` decodes the base64 string into a PostgreSQL-safe
+  bytea parameter on the way into the DB (`bytea` by default) and encodes it
+  back to base64 on read.
 
 ```ts
 @Entity()
@@ -333,8 +334,8 @@ API.
 **Querying.** A base64 binary column is a normal queryable field (no
 `GetMutator` required). To filter on it in `findAll`, attach
 `@QueryBase64Equal()` (or `@QueryBase64NotEqual()`); the incoming base64 query
-string is decoded to a `Buffer` right before it is bound, so it matches the
-binary stored in the column:
+string is decoded to a PostgreSQL-safe bytea parameter right before it is bound,
+so it matches the binary stored in the column:
 
 ```ts
 @Base64BinaryColumn()

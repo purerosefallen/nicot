@@ -23,19 +23,29 @@ class Blob extends IdBase() {
 
 const HELLO = 'hello world';
 const HELLO_B64 = Buffer.from(HELLO).toString('base64');
+const WEIRD = Buffer.from([0x00, 0xff, 0x80, 0x41, 0xef, 0xbf, 0xbd, 0x04]);
+const WEIRD_B64 = WEIRD.toString('base64');
+const WEIRD_BYTEA = `\\x${WEIRD.toString('hex')}`;
 
 describe('Base64BinaryTransformer', () => {
   const transformer = new Base64BinaryTransformer();
 
-  it('encodes a base64 string into a Buffer when writing to DB', () => {
+  it('encodes a base64 string into PostgreSQL bytea hex when writing to DB', () => {
     const out = transformer.to(HELLO_B64);
-    expect(Buffer.isBuffer(out)).toBe(true);
-    expect((out as Buffer).toString()).toBe(HELLO);
+    expect(out).toBe(`\\x${Buffer.from(HELLO).toString('hex')}`);
+  });
+
+  it('keeps arbitrary non-UTF8 bytes intact in PostgreSQL bytea hex', () => {
+    expect(transformer.to(WEIRD_B64)).toBe(WEIRD_BYTEA);
   });
 
   it('decodes a DB Buffer back into a base64 string', () => {
     const out = transformer.from(Buffer.from(HELLO));
     expect(out).toBe(HELLO_B64);
+  });
+
+  it('decodes PostgreSQL bytea hex back into a base64 string', () => {
+    expect(transformer.from(WEIRD_BYTEA)).toBe(WEIRD_B64);
   });
 
   it('round-trips base64 <-> binary', () => {
@@ -52,29 +62,33 @@ describe('Base64BinaryTransformer', () => {
   it('accepts a Buffer at insert time as the binary itself', () => {
     const buf = Buffer.from(HELLO);
     const out = transformer.to(buf);
-    expect(Buffer.isBuffer(out)).toBe(true);
-    expect((out as Buffer).toString()).toBe(HELLO);
+    expect(out).toBe(`\\x${buf.toString('hex')}`);
   });
 
   it('accepts a Uint8Array at insert time as the binary itself', () => {
     const arr = new Uint8Array(Buffer.from(HELLO));
     const out = transformer.to(arr);
-    expect(Buffer.isBuffer(out)).toBe(true);
-    expect((out as Buffer).toString()).toBe(HELLO);
+    expect(out).toBe(`\\x${Buffer.from(HELLO).toString('hex')}`);
   });
 
   it('accepts an ArrayBuffer at insert time as the binary itself', () => {
     const u8 = new Uint8Array(Buffer.from(HELLO));
     const out = transformer.to(u8.buffer);
-    expect(Buffer.isBuffer(out)).toBe(true);
-    expect((out as Buffer).toString()).toBe(HELLO);
+    expect(out).toBe(`\\x${Buffer.from(HELLO).toString('hex')}`);
   });
 
   it('honors the byteOffset / byteLength of a Uint8Array view', () => {
     const base = Buffer.from('XXhello worldYY');
     const view = new Uint8Array(base.buffer, base.byteOffset + 2, HELLO.length);
     const out = transformer.to(view);
-    expect((out as Buffer).toString()).toBe(HELLO);
+    expect(out).toBe(`\\x${Buffer.from(HELLO).toString('hex')}`);
+  });
+
+  it('can still emit a Buffer for non-PostgreSQL binary columns', () => {
+    const binaryTransformer = new Base64BinaryTransformer('binary');
+    const out = binaryTransformer.to(WEIRD_B64);
+    expect(Buffer.isBuffer(out)).toBe(true);
+    expect((out as Buffer).equals(WEIRD)).toBe(true);
   });
 });
 

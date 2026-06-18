@@ -207,8 +207,9 @@ OpenAPI 层面统统“伪装成”一个普通的 base64 `string` 字段：
 
 - 实体属性类型是 `string`（base64 字符串）。
 - OpenAPI 中以 `{ type: String, format: 'byte' }` 展示。
-- 通过 TypeORM `ValueTransformer`：写库时把 base64 字符串解码成 `Buffer`
-  （默认列类型 `bytea`），读取时再编码回 base64 字符串。
+- 通过 TypeORM `ValueTransformer`：写库时把 base64 字符串解码成
+  PostgreSQL 安全的 bytea 参数（默认列类型 `bytea`），读取时再编码回
+  base64 字符串。
 
 ```ts
 @Entity()
@@ -229,7 +230,7 @@ export class Attachment extends IdBase() {
 **查询。** base64 二进制列本身就是可查询字段（不需要 `GetMutator`）。想在
 `findAll` 中按它过滤，给它挂上 `@QueryBase64Equal()`（或
 `@QueryBase64NotEqual()`）即可：传入的 base64 查询串会在绑定参数前被解码成
-`Buffer`，从而与列里存的二进制匹配。
+PostgreSQL 安全的 bytea 参数，从而与列里存的二进制匹配。
 
 ```ts
 @Base64BinaryColumn()
