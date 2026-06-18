@@ -1,8 +1,8 @@
-import { ApiProperty, ApiPropertyOptions } from '@nestjs/swagger';
 import { getSpecificFields, reflector } from './metadata';
-import { AnyClass, getApiProperty } from 'nesties';
+import type { AnyClass } from 'nesties';
 import _ from 'lodash';
-import { DECORATORS } from '@nestjs/swagger/dist/constants';
+import { getApiProperty } from './get-api-property';
+import { DECORATORS } from './swagger-decorators';
 
 export const PatchColumnsInGet = <C extends AnyClass>(
   cl: C,

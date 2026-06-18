@@ -12,21 +12,21 @@ import {
 } from '@nestjs/common';
 import { ImportDataDto, ImportEntryDto } from './dto';
 import {
-  AnyClass,
   MergeMethodDecorators,
   PaginatedReturnMessageDto,
   ReturnMessageDto,
-  ClassType,
-  getApiProperty,
   DataPipe,
   ApiTypeResponse,
   ApiBlankResponse,
   ApiError,
+  RenameClass,
 } from 'nesties';
+import type { AnyClass, ClassType } from 'nesties';
 import {
   ApiBody,
   ApiOkResponse,
   ApiOperation,
+  ApiOperationOptions,
   ApiParam,
   ApiProperty,
   ApiPropertyOptions,
@@ -35,14 +35,12 @@ import {
   PartialType,
   PickType,
 } from '@nestjs/swagger';
-import { OperationObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import _, { upperFirst } from 'lodash';
 import {
   getNotInResultFields,
   getSpecificFields,
   reflector,
 } from './utility/metadata';
-import { RenameClass } from 'nesties';
 import { getTypeormRelations } from './utility/get-typeorm-relations';
 import { CrudBase, CrudOptions, CrudService } from './crud-base';
 import { PageSettingsDto } from './bases';
@@ -64,6 +62,7 @@ import { PatchColumnsInGet } from './utility/patch-column-in-get';
 import { OmitPipe, OptionalDataPipe, PickPipe } from './decorators';
 import { MutatorPipe } from './utility/mutate-pipe';
 import { Memorize } from 'nfkit';
+import { getApiProperty } from './utility/get-api-property';
 
 export interface RestfulFactoryOptions<
   T,
@@ -98,7 +97,7 @@ const getNextLevelRelations = (relations: string[], enteringField: string) =>
     .filter((r) => r.includes('.') && r.startsWith(`${enteringField}.`))
     .map((r) => r.split('.').slice(1).join('.'));
 
-export interface ResourceOptions extends Partial<OperationObject> {
+export interface ResourceOptions extends ApiOperationOptions {
   prefix?: string;
 }
 

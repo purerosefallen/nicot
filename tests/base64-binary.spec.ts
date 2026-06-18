@@ -9,7 +9,7 @@ import {
 } from '../src/utility/base64-binary';
 import { IdBase } from '../src/bases';
 import { RestfulFactory } from '../src/restful';
-import { getApiProperty } from 'nesties';
+import { getApiProperty } from '../src/utility/get-api-property';
 
 @Entity()
 class Blob extends IdBase() {
