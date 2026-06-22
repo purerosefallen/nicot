@@ -5,6 +5,8 @@ import { AnyClass, MergePropertyDecorators } from 'nesties';
 import { Column, ColumnOptions, Index } from 'typeorm';
 import {
   buildMessage,
+  IsArray,
+  IsBoolean,
   IsDate,
   IsEnum,
   IsInt,
@@ -334,6 +336,27 @@ export const BoolColumn = (
     GetMutatorBool(),
   ]);
 
+const jsonColumnValidators = (definition: ClassOrArray): PropertyDecorator[] => {
+  const isArray = Array.isArray(definition);
+  const cl = getClassFromClassOrArray(definition);
+  const validationOptions: ValidationOptions = isArray ? { each: true } : {};
+  const decorators: PropertyDecorator[] = isArray ? [IsArray()] : [];
+
+  if (cl === String) {
+    decorators.push(IsString(validationOptions));
+  } else if (cl === Number) {
+    decorators.push(IsNumber({}, validationOptions));
+  } else if (cl === Boolean) {
+    decorators.push(IsBoolean(validationOptions));
+  } else if (cl === Date) {
+    decorators.push(IsDate(validationOptions));
+  } else {
+    decorators.push(ValidateNested(validationOptions));
+  }
+
+  return decorators;
+};
+
 const createJsonColumnDef =
   (
     columnType: SimpleColumnType = 'jsonb',
@@ -349,7 +372,7 @@ const createJsonColumnDef =
     return MergePropertyDecorators([
       RequireGetMutator(),
       Type(() => cl),
-      ValidateNested(),
+      ...jsonColumnValidators(definition),
       Column(options.columnType || columnType, {
         ...columnDecoratorOptions(options),
         transformer: new typeTransformerClass(definition),
