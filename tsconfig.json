@@ -1,20 +1,22 @@
 {
 	"compilerOptions": {
 		"outDir": "dist",
-		"module": "commonjs",
-		"target": "es2021",
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"target": "es2023",
 		"esModuleInterop": true,
 		"emitDecoratorMetadata": true,
 		"experimentalDecorators": true,
+		"useDefineForClassFields": false,
 		"declaration": true,
-		"sourceMap": true
+		"sourceMap": true,
+		"strict": false,
+		"skipLibCheck": true
 	},
 	"compileOnSave": true,
 	"allowJs": true,
 	"include": [
 		"*.ts",
-		"src/**/*.ts",
-		"test/**/*.ts",
-		"tests/**/*.ts"
+		"src/**/*.ts"
 	]
 }

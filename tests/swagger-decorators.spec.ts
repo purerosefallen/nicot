@@ -1,45 +1,49 @@
+import 'reflect-metadata';
+
+import { Controller, Get } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import {
+  ApiHeader,
+  DocumentBuilder,
+  SwaggerModule,
+} from '@nestjs/swagger';
+import { DECORATORS } from '../src/utility/swagger-decorators';
+
 describe('swagger decorators', () => {
-  afterEach(() => {
-    jest.resetModules();
-    jest.dontMock('@nestjs/swagger/dist/constants');
+  test('uses stable Swagger metadata keys', () => {
+    expect(DECORATORS.API_MODEL_PROPERTIES).toBe(
+      'swagger/apiModelProperties',
+    );
+    expect(DECORATORS.API_HEADERS).toBe('swagger/apiHeaders');
+    expect(DECORATORS.API_PARAMETERS).toBe('swagger/apiParameters');
   });
 
-  test('uses swagger constants when the private subpath is available', () => {
-    jest.isolateModules(() => {
-      jest.doMock(
-        '@nestjs/swagger/dist/constants',
-        () => ({
-          DECORATORS: {
-            API_MODEL_PROPERTIES: 'custom/apiModelProperties',
-          },
-        }),
-        { virtual: true },
-      );
+  test('produces headers through the public Swagger API', async () => {
+    @Controller('docs')
+    class DocsController {
+      @Get()
+      @ApiHeader({ name: 'x-doc-header', required: true })
+      read() {
+        return 'ok';
+      }
+    }
 
-      const { DECORATORS } = require('../src/utility/swagger-decorators');
+    const testingModule = await Test.createTestingModule({
+      controllers: [DocsController],
+    }).compile();
+    const app = testingModule.createNestApplication();
+    await app.init();
 
-      expect(DECORATORS.API_MODEL_PROPERTIES).toBe('custom/apiModelProperties');
-      expect(DECORATORS.API_HEADERS).toBe('swagger/apiHeaders');
-    });
-  });
+    const document = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().build(),
+    );
+    expect(document.paths['/docs']?.get?.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ in: 'header', name: 'x-doc-header' }),
+      ]),
+    );
 
-  test('falls back to built-in constants when the private subpath is unavailable', () => {
-    jest.isolateModules(() => {
-      jest.doMock(
-        '@nestjs/swagger/dist/constants',
-        () => {
-          throw new Error('Package subpath is not exported');
-        },
-        { virtual: true },
-      );
-
-      const { DECORATORS } = require('../src/utility/swagger-decorators');
-
-      expect(DECORATORS.API_MODEL_PROPERTIES).toBe(
-        'swagger/apiModelProperties',
-      );
-      expect(DECORATORS.API_HEADERS).toBe('swagger/apiHeaders');
-      expect(DECORATORS.API_PARAMETERS).toBe('swagger/apiParameters');
-    });
+    await app.close();
   });
 });

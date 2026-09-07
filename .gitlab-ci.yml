@@ -35,6 +35,9 @@ build:
 unit-test:
   extends:
     - .build_base
+  dependencies:
+    - npm_ci
+    - build
   script:
     - npm run test
 

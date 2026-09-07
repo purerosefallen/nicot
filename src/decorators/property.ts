@@ -1,6 +1,6 @@
-import { ColumnCommonOptions } from 'typeorm/decorator/options/ColumnCommonOptions';
+import type { ColumnCommonOptions } from 'typeorm/decorator/options/ColumnCommonOptions.js';
 import { ApiProperty, ApiPropertyOptions } from '@nestjs/swagger';
-import { ColumnWithLengthOptions } from 'typeorm/decorator/options/ColumnWithLengthOptions';
+import type { ColumnWithLengthOptions } from 'typeorm/decorator/options/ColumnWithLengthOptions.js';
 import { AnyClass, MergePropertyDecorators } from 'nesties';
 import { Column, ColumnOptions, Index } from 'typeorm';
 import {
@@ -22,13 +22,13 @@ import {
   ValidateNested,
   isBase64,
 } from 'class-validator';
-import {
+import type {
   SimpleColumnType,
   UnsignedColumnType,
   WithLengthColumnType,
   WithPrecisionColumnType,
-} from 'typeorm/driver/types/ColumnTypes';
-import { ColumnNumericOptions } from 'typeorm/decorator/options/ColumnNumericOptions';
+} from 'typeorm/driver/types/ColumnTypes.js';
+import type { ColumnNumericOptions } from 'typeorm/decorator/options/ColumnNumericOptions.js';
 import { Exclude, Transform, Type } from 'class-transformer';
 import { BigintTransformer } from '../utility/bigint';
 import { Metadata } from '../utility/metadata';
@@ -44,7 +44,7 @@ import {
   NotWritable,
 } from './access';
 import { parseBool } from 'nesties';
-import { ColumnUnsignedOptions } from 'typeorm/decorator/options/ColumnUnsignedOptions';
+import type { ColumnUnsignedOptions } from 'typeorm/decorator/options/ColumnUnsignedOptions.js';
 import { GetMutatorBool, RequireGetMutator } from './get-mutator';
 import {
   Base64BinaryStorage,

@@ -23,7 +23,7 @@ export interface SwaggerDecorators {
 
 const DECORATORS_PREFIX = 'swagger';
 
-const FALLBACK_DECORATORS: SwaggerDecorators = {
+export const DECORATORS: SwaggerDecorators = {
   API_OPERATION: `${DECORATORS_PREFIX}/apiOperation`,
   API_RESPONSE: `${DECORATORS_PREFIX}/apiResponse`,
   API_PRODUCES: `${DECORATORS_PREFIX}/apiProduces`,
@@ -45,23 +45,3 @@ const FALLBACK_DECORATORS: SwaggerDecorators = {
   API_DEFAULT_GETTER: `${DECORATORS_PREFIX}/apiDefaultGetter`,
   API_LINK: `${DECORATORS_PREFIX}/apiLink`,
 };
-
-function loadSwaggerDecorators(): SwaggerDecorators {
-  try {
-    const req = typeof require === 'function' ? require : undefined;
-    const decorators = req?.('@nestjs/swagger/dist/constants')?.DECORATORS;
-
-    if (decorators) {
-      return {
-        ...FALLBACK_DECORATORS,
-        ...decorators,
-      };
-    }
-  } catch {
-    // Newer @nestjs/swagger versions hide dist/constants behind package exports.
-  }
-
-  return FALLBACK_DECORATORS;
-}
-
-export const DECORATORS = loadSwaggerDecorators();
