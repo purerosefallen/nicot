@@ -35,7 +35,7 @@ import {
   PartialType,
   PickType,
 } from '@nestjs/swagger';
-import _, { upperFirst } from 'lodash';
+import _ from 'lodash';
 import {
   getNotInResultFields,
   getSpecificFields,
@@ -462,7 +462,7 @@ export class RestfulFactory<
           {
             entityClassName: `${this.entityClassName}${
               this.options.relations
-                ? upperFirst(relation.propertyName)
+                ? _.upperFirst(relation.propertyName)
                 : relation.propertyClass.name
             }`,
             relations:
@@ -762,7 +762,7 @@ export class RestfulFactory<
       this.usePrefix(Post, options.prefix, ':id', operationName),
       HttpCode(200),
       ApiOperation({
-        summary: `${upperFirst(operationName)} a ${this.entityClassName} by id`,
+        summary: `${_.upperFirst(operationName)} a ${this.entityClassName} by id`,
         ..._.omit(options, 'prefix', 'returnType'),
       }),
       options.returnType

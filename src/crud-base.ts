@@ -22,8 +22,8 @@ import {
   QueryWise,
 } from './bases';
 import { ConsoleLogger, HttpException } from '@nestjs/common';
-import { camelCase } from 'typeorm/util/StringUtils';
-import _, { omit } from 'lodash';
+import { camelCase } from 'typeorm/util/StringUtils.js';
+import _ from 'lodash';
 import {
   Awaitable,
   BlankReturnMessageDto,
@@ -39,7 +39,7 @@ import {
 } from './utility/metadata';
 import { getTypeormRelations } from './utility/get-typeorm-relations';
 import { getPaginatedResult } from './utility/cursor-pagination-utils';
-import PQueue from 'p-queue';
+import PQueuePackage from 'p-queue';
 import { RelationDef } from './utility/relation-def';
 import { filterRelations } from './utility/filter-relations';
 import { BindingValueMetadata, DefaultBindingKey } from './decorators';
@@ -79,6 +79,10 @@ export interface CrudOptions<T extends ValidCrudEntity<T>> {
 }
 
 const loadedParsers = new Set<string>();
+const PQueue =
+  (PQueuePackage as unknown as { default?: typeof PQueuePackage }).default ??
+  PQueuePackage;
+
 const loadFullTextQueue = new PQueue({
   concurrency: 1,
 });
@@ -412,7 +416,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     let ent = new this.entityClass();
     Object.assign(
       ent,
-      omit(_ent, ...this._typeormRelations.map((r) => r.propertyName)),
+      _.omit(_ent, ...this._typeormRelations.map((r) => r.propertyName)),
     );
     const invalidReason = ent.isValidInCreate?.();
     if (invalidReason) {
@@ -715,7 +719,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
     const ent = new this.entityClass();
     Object.assign(
       ent,
-      omit(_ent, ...this._typeormRelations.map((r) => r.propertyName)),
+      _.omit(_ent, ...this._typeormRelations.map((r) => r.propertyName)),
     );
     const invalidReason = ent.isValidInUpsert?.();
     if (invalidReason) {
@@ -855,7 +859,7 @@ export class CrudBase<T extends ValidCrudEntity<T>> {
       const newEnt = new this.entityClass();
       Object.assign(
         newEnt,
-        omit(ent, ...this._typeormRelations.map((r) => r.propertyName)),
+        _.omit(ent, ...this._typeormRelations.map((r) => r.propertyName)),
       );
       return newEnt;
     });
