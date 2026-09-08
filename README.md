@@ -49,8 +49,10 @@ npm install nicot @nestjs/config typeorm @nestjs/typeorm class-validator class-t
 
 NICOT targets:
 
-- NestJS ^9 / ^10 / ^11  
-- TypeORM ^0.3.x
+- NestJS ^12
+- `@nestjs/typeorm` ^12
+- TypeORM ^0.3.27 or ^1
+- Node.js ^20.19, ^22.12, or >=24
 
 ## Testing
 
@@ -374,6 +376,8 @@ These decorators control **where** a field appears:
 Example:
 
 ```ts
+import { type Relation } from 'typeorm';
+
 @Entity()
 export class User extends IdBase() {
   @StringColumn(255, { required: true })
@@ -388,8 +392,8 @@ export class User extends IdBase() {
   createdAt: Date;
 
   @NotColumn()
-  @RelationComputed(() => Profile)
-  profileSummary: ProfileSummary;
+  @RelationComputed(() => ProfileSummary)
+  profileSummary: Relation<ProfileSummary>;
 }
 ```
 
@@ -1362,6 +1366,8 @@ Relations are controlled by:
 Example:
 
 ```ts
+import { Entity, ManyToOne, OneToMany, type Relation } from 'typeorm';
+
 @Entity()
 export class User extends IdBase() {
   @OneToMany(() => Article, article => article.user)
@@ -1371,9 +1377,28 @@ export class User extends IdBase() {
 @Entity()
 export class Article extends IdBase() {
   @ManyToOne(() => User, user => user.articles)
-  user: User;
+  user: Relation<User>;
 }
 ```
+
+### NestJS 12 / ESM relation typing rule
+
+Always give the TypeORM relation decorator an explicit lazy target callback such as
+`() => User`. Use a direct array type for collection-valued relations and
+`Relation<T>` for single-valued relations:
+
+- Collection relation: `articles: Article[]`
+- Single relation: `author: Relation<User>`
+
+This distinction matters under ESM. A direct single-valued type such as
+`author: User` can emit `design:type = User`, which evaluates the imported class
+while circular entity modules are still initializing. `Relation<User>` emits
+`Object` instead and avoids that temporal-dead-zone access. A direct array emits
+only `design:type = Array`, so `Article[]` is safe.
+
+For ordinary TypeORM relations, NICOT obtains the target class from the explicit
+TypeORM callback and obtains collection cardinality from TypeORM relation metadata;
+it does not need the concrete `design:type` value.
 
 If you configure:
 
@@ -1392,16 +1417,25 @@ Then:
 
 Sometimes you want a **computed field** that conceptually depends on relations, but is not itself a DB column.
 
+`@RelationComputed` has an additional rule: always pass the explicit target
+callback. Use `Relation<T>` for a single computed relation, but keep a computed
+collection as `T[]`. Do **not** declare a computed collection as `Relation<T[]>`.
+The current implementation uses `design:type === Array` to determine whether a
+computed relation is a collection; `Relation<T[]>` emits `Object` and would be
+treated as a single value.
+
 Example:
 
 ```ts
+import { ManyToOne, type Relation } from 'typeorm';
+
 @Entity()
 export class Match extends IdBase() {
   @ManyToOne(() => Participant, p => p.matches1)
-  player1: Participant;
+  player1: Relation<Participant>;
 
   @ManyToOne(() => Participant, p => p.matches2)
-  player2: Participant;
+  player2: Relation<Participant>;
 
   @NotColumn()
   @RelationComputed(() => Participant)
@@ -1874,6 +1908,10 @@ In NICOT:
   - Validation
   - Access control (`@NotWritable`, `@NotInResult`, `@NotQueryable`)
   - Query capabilities (`@QueryXXX`)
+  - TypeORM relation decorators always receive an explicit `() => T`; collection
+    properties use `T[]`, while single-value properties use `Relation<T>`.
+    `RelationComputed` follows the same rule, and its collection properties must
+    remain direct arrays so their emitted metadata is `Array`.
 - For list APIs, strongly consider:
   - `skipNonQueryableFields: true`
   - `@QueryXXX` only on fields you really want public filtering on.

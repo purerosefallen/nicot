@@ -112,6 +112,44 @@ class User extends IdBase() {}
 class Token extends StringIdBase({ uuid: true }) {}
 ```
 
+`IdBase()` 会创建 `bigint` 自增数字主键，并自动应用 `NotWritable`、
+`QueryEqual` 和默认的 `id DESC` 排序。`StringIdBase()` 创建字符串主键；
+`uuid: true` 时由数据库生成 UUID，否则由客户端提供字符串 ID，并默认按
+`id ASC` 排序。两者都可通过 `noOrderById: true` 关闭默认排序。
+
+---
+
+## Column 装饰器概览
+
+NICOT 的 `***Column()` 装饰器会同时组合 TypeORM 列定义、class-validator
+验证规则与 Swagger `ApiProperty` metadata：
+
+| 装饰器 | 默认数据库类型 | 默认验证 |
+| --- | --- | --- |
+| `@StringColumn(len)` | `varchar(len)` | `IsString`、`Length` |
+| `@TextColumn()` | `text` | `IsString` |
+| `@UuidColumn()` | `uuid` | `IsUUID` |
+| `@IntColumn(type)` | 整数类型 | `IsInt` |
+| `@FloatColumn(type)` | 浮点或 decimal | `IsNumber` |
+| `@BoolColumn()` | `boolean` | `IsBoolean` |
+| `@DateColumn()` | timestamp/date | `IsDate` |
+| `@JsonColumn(T)` | `jsonb` | 对象及嵌套验证 |
+| `@SimpleJsonColumn()` | `json` | 对象及嵌套验证 |
+| `@StringJsonColumn()` | 文本 JSON | 对象及嵌套验证 |
+| `@EnumColumn(Enum)` | enum/text | enum 验证 |
+| `@Base64BinaryColumn()` | `bytea` | base64 字符串或二进制 |
+
+所有列装饰器都可通过 options 同时声明接口约束：
+
+```ts
+@StringColumn(255, {
+  required: true,
+  description: '显示名称',
+  default: 'Anonymous',
+})
+displayName: string;
+```
+
 ---
 
 ## 访问权限装饰器（字段级“能看 / 能写 / 能查”）
@@ -198,6 +236,46 @@ content: string;
 | QueryAnd / QueryOr  | 条件组合              |
 | QueryFullText       | PostgreSQL 全文搜索   |
 
+### `findAll()` / `findAllCursorPaginated()` 查询生命周期
+
+调用 `CrudBase.findAll(dto)` 时，NICOT 会：
+
+1. 创建实体实例并复制 DTO。
+2. 调用实体的 `beforeGet()`。
+3. 调用 `entity.applyQuery(qb, alias)`，例如 `IdBase` 在这里添加默认排序。
+4. 应用 `relations` 配置的 join。
+5. 依次运行字段上的 `QueryCondition`，修改 `SelectQueryBuilder`。
+
+因此 `@QueryXXX()` 本质上是声明式的查询构造 hook。除上表外，还支持
+`QueryGreaterEqual`、`QueryLessEqual`、`QueryNotEqual`、
+`QueryEqualZeroNullable` 和 PostgreSQL `QueryJsonbHas`。
+
+### QueryAnd / QueryOr 组合条件
+
+`QueryAnd(A, B)` 会在同一字段上同时应用两个条件；`QueryOr(A, B)` 会生成
+带括号的 `(A) OR (B)` 条件组，适合多列搜索或 fallback 查询：
+
+```ts
+@QueryOr(QueryIn('name'), QueryEqual('bio'))
+search: string;
+```
+
+### PostgreSQL 全文搜索
+
+```ts
+@StringColumn(255)
+@QueryFullText({
+  configuration: 'english',
+  tsQueryFunction: 'websearch_to_tsquery',
+  orderBySimilarity: true,
+})
+content: string;
+```
+
+模块初始化时会准备需要的全文配置与索引；查询时生成
+`to_tsvector(...) @@ websearch_to_tsquery(...)`，并可按 rank 排序。该能力只
+支持 PostgreSQL。
+
 ---
 
 ## Base64 二进制列：`@Base64BinaryColumn()`
@@ -256,6 +334,18 @@ meta: SomeJSONType; // ?meta={"foo":"bar"} → 对象
 ```
 
 在 OpenAPI 里，这些字段仍以 string 展示；在实际运行时，它们已经被转换为你想要的类型。
+
+运行流程是：Swagger 将字段描述成适合 URL 的字符串，`MutatorPipe` 在运行时
+调用字段上的 mutator，Controller 最终收到转换后的 DTO。内置 helper 包括：
+
+- `GetMutatorBool`
+- `GetMutatorInt` / `GetMutatorFloat`
+- `GetMutatorStringSeparated`
+- `GetMutatorIntSeparated` / `GetMutatorFloatSeparated`
+- `GetMutatorJson`
+
+`RestfulFactory.findAllParam()` 会自动组合 `MutatorPipe`、用于移除禁止查询字段的
+`OmitPipe`，以及开启 `skipNonQueryableFields` 时的 `PickPipe`。
 
 ---
 
@@ -489,6 +579,137 @@ Binding 系统提供了：
 
 这套机制让 NICOT 在保持自动化 CRUD 的同时，也能优雅支持多租户隔离、权限隔离与上下文驱动业务逻辑。
 
+---
+
+## Upsert：按冲突键执行幂等写入（PUT /resource）
+
+Upsert 会根据显式声明的冲突键插入新行，或更新已经匹配的行。它有独立的
+DTO、验证和生命周期，不复用 create/update 规则，并会把 Binding 纳入冲突键，
+避免跨租户覆盖。
+
+### 1. 使用 `@UpsertColumn` 声明冲突键
+
+```ts
+@Entity()
+@UpsertableEntity()
+export class Article extends IdBase() {
+  @UpsertColumn()
+  @StringColumn(64, { required: true, description: '租户内唯一 slug' })
+  slug: string;
+
+  @StringColumn(255, { required: true })
+  title: string;
+
+  isValidInUpsert() {
+    return !this.slug ? 'slug is required' : undefined;
+  }
+
+  async beforeUpsert() {}
+  async afterUpsert() {}
+}
+```
+
+只有挂了 `@UpsertColumn()` 的字段才会成为自然冲突键。Upsert 使用
+`isValidInUpsert()`、`beforeUpsert()` 和 `afterUpsert()`，与 create/update
+生命周期彼此独立。
+
+### 2. 使用 `@UpsertableEntity` 启用 Upsert
+
+`@UpsertableEntity()` 会检查实体至少存在一个 UpsertColumn、BindingColumn，
+或可用于 upsert 的基础 ID，并为有效冲突键建立数据库 UNIQUE 约束，以满足
+PostgreSQL `INSERT ... ON CONFLICT (...) DO UPDATE` 的要求。
+
+实际冲突键由所有 `@UpsertColumn()` 与 `@BindingColumn()` 共同组成；如果最终
+只剩主键，则直接使用主键约束。
+
+### 3. StringIdBase 的 UUID 与手动 ID
+
+- `StringIdBase({ uuid: true })` 的 ID 由数据库生成，通常应另行声明自然冲突键。
+- `StringIdBase({ uuid: false })` 或省略 `uuid` 时，ID 由客户端提供，默认可作为
+  自然键参与 upsert。
+- 如果同时把 ID 和其他字段纳入冲突键，匹配条件是完整 tuple；不要在希望
+  `slug` 单独决定身份时误把 ID 也纳入组合键。
+
+### 4. Upsert 与 Binding
+
+BindingColumn 会自动加入冲突键：
+
+```ts
+@Entity()
+@UpsertableEntity()
+export class TenantArticle extends IdBase() {
+  @BindingColumn('app')
+  @IntColumn('int', { unsigned: true })
+  appId: number;
+
+  @UpsertColumn()
+  @StringColumn(64)
+  slug: string;
+
+  @StringColumn(255)
+  title: string;
+}
+
+@Injectable()
+export class TenantArticleService extends CrudService(TenantArticle) {
+  constructor(@InjectRepository(TenantArticle) repo) {
+    super(repo);
+  }
+
+  @BindingValue('app')
+  get currentAppId() {
+    return 44;
+  }
+}
+```
+
+这里的有效冲突键是 `(appId, slug)`，不同租户的相同 slug 不会互相覆盖。
+
+### 5. 暴露 PUT Upsert 接口
+
+```ts
+export const ArticleFactory = new RestfulFactory(TenantArticle, {
+  relations: ['author'],
+  upsertIncludeRelations: true,
+  skipNonQueryableFields: true,
+});
+
+@Injectable()
+export class ArticleService extends ArticleFactory.crudService() {
+  constructor(@InjectRepository(TenantArticle) repo) {
+    super(repo);
+  }
+}
+
+export class UpsertArticleDto extends ArticleFactory.upsertDto {}
+
+@Controller('articles')
+export class ArticleController {
+  constructor(private readonly service: ArticleService) {}
+
+  @ArticleFactory.upsert()
+  upsert(@ArticleFactory.upsertParam() dto: UpsertArticleDto) {
+    return this.service.upsert(dto);
+  }
+}
+```
+
+这会生成 `PUT /articles`。开启 `upsertIncludeRelations` 后，NICOT 会重新查询
+保存结果、按 factory 的 relations 加载关系并返回完整结构；关闭时只返回实体
+自身字段。
+
+### 6. 软删除恢复
+
+如果冲突键匹配到已经软删除的行，NICOT 会清空 `deleteTime`，使用
+`withDeleted()` 重新读取并在需要时显式 restore，使 delete → upsert 仍保持幂等。
+
+### 7. 推荐实践
+
+- 使用 `slug`、`code`、`externalId` 等稳定自然键。
+- 多租户实体把 UpsertColumn 与 BindingColumn 组合成唯一键。
+- 把 upsert 专用验证放进 `isValidInUpsert()`。
+- 手动字符串 ID 默认作为自然键；只有明确需要组合身份时才增加其他冲突字段。
+
 
 
 ---
@@ -511,10 +732,19 @@ NICOT 的关系配置出现在两个层面，各自含义不同：
 
 ```ts
 // user.entity.ts
+import { Entity, ManyToOne, OneToMany, type Relation } from 'typeorm';
+
 @Entity()
 export class User extends IdBase() {
   @OneToMany(() => Article, article => article.user)
   articles: Article[];
+}
+
+// article.entity.ts
+@Entity()
+export class Article extends IdBase() {
+  @ManyToOne(() => User, user => user.articles)
+  user: Relation<User>;
 }
 
 // user.factory.ts
@@ -545,6 +775,24 @@ export class UserController extends UserFactory.baseController() {
 - 查询时会自动 left join user.articles。  
 - 不需要自己维护多份 relations 配置。
 
+### NestJS 12 / ESM 下的关系类型规则
+
+TypeORM 关系装饰器必须始终显式传入延迟求值的目标类型，例如
+`() => User`。关系属性根据是否为集合采用不同写法：
+
+- 集合关系：`articles: Article[]`
+- 单值关系：`author: Relation<User>`
+
+这个区别在 ESM 下很重要。单值字段直接写成 `author: User` 时，TypeScript
+可能生成 `design:type = User`，实体文件存在循环依赖时会在模块尚未初始化完成前
+访问 `User`，从而触发 temporal dead zone 错误。`Relation<User>` 只会生成
+`design:type = Object`，不会在装饰器执行阶段提前读取对端 class。
+
+数组字段直接写成 `Article[]` 时生成的是 `design:type = Array`，不会直接引用
+`Article`，因此是安全的。对于普通 TypeORM relation，NICOT 会从
+`@OneToMany(() => Article)` / `@ManyToOne(() => User)` 保存的 TypeORM metadata
+取得目标 class，并从 relation 类型判断是否为集合，不依赖具体的 `design:type`。
+
 ### @RelationComputed：标记“由关系推导出的 NotColumn 字段”
 
 有些字段本身不落库（NotColumn），但它是由若干关系字段组合出来的，并且你希望它可以：
@@ -554,7 +802,24 @@ export class UserController extends UserFactory.baseController() {
 
 这种场景使用 @RelationComputed。
 
+`@RelationComputed` 必须显式提供 `() => T`。单值计算关系使用
+`Relation<T>`，集合计算关系保持为 `T[]`。不能把集合计算关系写成
+`Relation<T[]>`：当前实现通过 `design:type === Array` 判断它是不是集合，而
+`Relation<T[]>` 只会生成 `Object`，最终会被错误地当成单值关系。
+
 ```ts
+@NotColumn()
+@RelationComputed(() => Article)
+bestArticle: Relation<Article>; // 单值：Relation<T>
+
+@NotColumn()
+@RelationComputed(() => Article)
+recentArticles: Article[]; // 集合：T[]
+```
+
+```ts
+import { Entity, ManyToOne, OneToMany, type Relation } from 'typeorm';
+
 @Entity()
 export class Participant extends IdBase() {
   @OneToMany(() => Match, m => m.player1)
@@ -567,10 +832,10 @@ export class Participant extends IdBase() {
 @Entity()
 export class Match extends IdBase() {
   @ManyToOne(() => Participant, p => p.matches1)
-  player1: Participant;
+  player1: Relation<Participant>;
 
   @ManyToOne(() => Participant, p => p.matches2)
-  player2: Participant;
+  player2: Relation<Participant>;
 
   @NotColumn()
   @RelationComputed(() => Participant)
@@ -598,8 +863,147 @@ export const MatchFactory = new RestfulFactory(Match, {
 总结一下关系相关的最佳实践：
 
 - 真正的 @ManyToOne / @OneToMany 一律在 entity 上写清楚。  
+- 集合 relation 使用 `T[]`，单值 relation 使用 `Relation<T>`。
 - 所有对外需要返回的关系字段，集中在 xxx.factory.ts 的 relations 里配置。  
-- 复杂组合 / 聚合字段（NotColumn）用 @RelationComputed 标记依赖类型，再加到 relations 里。
+- 复杂组合 / 聚合字段（NotColumn）使用带显式 callback 的 @RelationComputed，再加到 relations 里。
+
+---
+
+## 统一返回结构
+
+NICOT 的响应统一使用下面的 envelope：
+
+```ts
+{
+  statusCode: number;
+  success: boolean;
+  message: string;
+  timestamp?: string;
+  data?: unknown;
+}
+```
+
+通用类型包括：
+
+- `ReturnMessageDto(Entity)`：单条数据。
+- `PaginatedReturnMessageDto(Entity)`：包含 `total`、`totalPages` 等页码信息。
+- `CursorPaginationReturnMessageDto(Entity)`：包含 `nextCursor`、`previousCursor`。
+- `BlankReturnMessageDto`：没有 data 的响应。
+
+`RestfulFactory` 同时生成对应的 `entityReturnMessageDto`、
+`entityCreateReturnMessageDto`、`entityArrayReturnMessageDto` 和
+`entityCursorPaginationReturnMessageDto`。自定义接口也可以直接复用这些 wrapper，
+以保持返回和 Swagger schema 一致。
+
+---
+
+## Transactional TypeORM：请求级事务
+
+默认情况下，多次 repository 调用不会自动合并为一个事务。希望“一次 HTTP 请求
+= 一个数据库事务”时，可组合下面两个入口：
+
+- `TransactionalTypeOrmModule.forFeature(...)`：提供 request-scoped、事务感知的
+  `EntityManager` / `Repository`，并包含和导出 TypeORM `forFeature()`。
+- `TransactionalTypeOrmInterceptor()`：在请求进入时开启事务，正常结束时提交，
+  抛错时回滚。
+
+模块仍需在根部通过 `TypeOrmModule.forRoot(...)` 配置 DataSource：
+
+```ts
+@Module({
+  imports: [TransactionalTypeOrmModule.forFeature([User])],
+  controllers: [UserController],
+  providers: [UserService],
+})
+export class UserModule {}
+```
+
+Controller 开启请求级事务，并让 Service 使用同一事务中的 repository：
+
+```ts
+@Controller('users')
+@UseInterceptors(TransactionalTypeOrmInterceptor())
+export class UserController extends UserFactory.baseController() {
+  constructor(service: UserService) {
+    super(service);
+  }
+}
+
+@Injectable()
+export class UserService extends UserFactory.crudService() {
+  constructor(
+    @InjectTransactionalRepository(User)
+    repo: Repository<User>,
+  ) {
+    super(repo);
+  }
+}
+```
+
+需要跨 repository 的复杂操作时，可以注入
+`@InjectTransactionalEntityManager() em: EntityManager`。事务适合多次写入必须一起
+提交或回滚的短请求；不要用于 SSE / 长连接，也不必强加给昂贵但纯只读的接口。
+
+---
+
+## Entity Operation：单实体原子业务操作
+
+NICOT 的 operation 分成互相独立的两层：
+
+1. `CrudService.operation()` 执行领域逻辑。
+2. `RestfulFactory.operation()` 把该逻辑暴露成标准 HTTP 接口。
+
+Service operation 会在 Binding 范围内检查实体，开启事务并以
+`pessimistic_write` 锁读取目标行，执行 callback，随后只写回发生变化的列；callback
+抛出的异常会使事务回滚。
+
+```ts
+@Injectable()
+export class UserService extends UserFactory.crudService() {
+  async disableUser(id: number) {
+    return this.operation(id, async user => {
+      user.isActive = false;
+      return { disabled: true };
+    });
+  }
+}
+```
+
+callback 返回 `void` / `undefined` / `null` 时得到空的成功响应；返回其他数据时得到
+`GenericReturnMessageDto`。实体上的 `@BindingColumn` 与 Service 上的
+`@BindingValue` 会自动限制存在性检查、加锁和更新范围。
+
+如果外层已经由 request transaction 管理事务，可传入 `options.repo`，避免再开启
+嵌套事务：
+
+```ts
+return this.operation(
+  id,
+  async user => {
+    user.name = 'Updated in request transaction';
+  },
+  { repo: this.repo },
+);
+```
+
+Controller 层的 operation 只声明路由、Swagger metadata 和统一响应，不承载业务
+逻辑：
+
+```ts
+@Controller('users')
+export class UserController {
+  constructor(private readonly service: UserService) {}
+
+  @UserFactory.operation('disable')
+  disable(@UserFactory.idParam() id: number) {
+    return this.service.disableUser(id);
+  }
+}
+```
+
+这会生成 `POST /users/:id/disable`。需要自定义响应数据类型时可传
+`{ returnType: ResetPasswordResultDto }`。推荐把可测试、可复用的业务逻辑放在
+Service operation 中，让 Controller 只负责声明接口。
 
 ---
 
@@ -679,6 +1083,103 @@ export class UserResultDto extends UserFactory.entityResultDto {}
 ```
 
 你可以在手写 Controller 时直接复用这些 DTO。
+
+---
+
+## CrudBase 与 CrudService
+
+`CrudBase<T>` 承担 NICOT 的核心 CRUD 与查询行为：
+
+- `create(ent, beforeCreate?)`
+- `findOne(id, extraQuery?)`
+- `findAll(dto?, extraQuery?)`
+- `findAllCursorPaginated(dto?, extraQuery?)`
+- `update(id, dto, cond?)`
+- `delete(id, cond?)`
+- `importEntities(entities, extraChecking?)`
+- `exists(id)`
+- `onModuleInit()`（加载 PostgreSQL 全文索引）
+
+这些方法统一处理 relations、Binding、`NotInResult` / `outputFieldsToOmit`
+以及实体的验证和生命周期钩子。通常不直接继承 `CrudBase`，而是让 factory
+生成 Service：
+
+```ts
+export const UserFactory = new RestfulFactory(User, {
+  relations: ['articles'],
+});
+
+@Injectable()
+export class UserService extends UserFactory.crudService() {
+  constructor(@InjectRepository(User) repo: Repository<User>) {
+    super(repo);
+  }
+}
+```
+
+自定义业务方法仍可直接调用 TypeORM repository，但那样不会自动执行
+`beforeGet()`、`afterGet()` 等 NICOT 生命周期。希望保留 NICOT 行为时，应从
+`CrudBase` / `CrudService` 的方法进入。
+
+---
+
+## RestfulFactory：DTO 与 Controller 生成器
+
+`RestfulFactory<T>` 把 entity metadata 映射为 DTO、Swagger schema、参数管道和
+Controller 装饰器。常用 options 包括：
+
+```ts
+interface RestfulFactoryOptions<T> {
+  fieldsToOmit?: (keyof T)[];
+  writeFieldsToOmit?: (keyof T)[];
+  createFieldsToOmit?: (keyof T)[];
+  updateFieldsToOmit?: (keyof T)[];
+  findAllFieldsToOmit?: (keyof T)[];
+  outputFieldsToOmit?: (keyof T)[];
+  prefix?: string;
+  keepEntityVersioningDates?: boolean;
+  entityClassName?: string;
+  relations?: (string | RelationDef)[];
+  skipNonQueryableFields?: boolean;
+}
+```
+
+- `relations` 同时决定要加载的关系与 Result DTO / OpenAPI 中公开的关系深度。
+- `outputFieldsToOmit` 在 `@NotInResult` 之外继续裁剪返回字段。
+- `prefix` 给工厂生成的路由增加统一前缀。
+- `skipNonQueryableFields` 只让显式 `@QueryXXX` 字段进入查询 DTO。
+
+工厂提供成对的路由与参数装饰器：
+
+- `create()` / `createParam()`
+- `findOne()` / `idParam()`
+- `findAll()` 或 `findAllCursorPaginated()` / `findAllParam()`
+- `update()` / `updateParam()`
+- `delete()`
+- `import()`（`POST /import`）
+- `upsert()` / `upsertParam()`（启用 Upsert 时）
+
+它们会组合 Nest HTTP 路由、Swagger response、Validation/Transform 管道和 NICOT
+返回类型。需要插入业务逻辑时使用后文的手写 Controller；没有额外逻辑时可直接
+生成完整 Controller：
+
+```ts
+@Controller('users')
+export class UserController extends UserFactory.baseController({
+  paginateType: 'offset', // 'offset' | 'cursor' | 'none'
+  globalMethodDecorators: [],
+  routes: {
+    import: { enabled: false },
+  },
+}) {
+  constructor(service: UserService) {
+    super(service);
+  }
+}
+```
+
+如果 `routes` 中任意路由写了 `enabled: true`，只生成明确启用的路由；否则默认
+生成全部路由，仅排除 `enabled: false` 的条目。
 
 ---
 
@@ -828,11 +1329,36 @@ export class PostController {
 
 ---
 
+## 最佳实践
+
+- 每个实体建立一个独立的 `*.factory.ts`，让 entity、factory、service 和
+  controller 解耦，同时共享同一份接口配置。
+- 让实体拥有完整契约：列类型、验证、访问控制（`@NotWritable`、
+  `@NotInResult`、`@NotQueryable`）和允许公开的查询能力（`@QueryXXX`）。
+- 所有 TypeORM relation 装饰器都显式传入 `() => T`；集合属性使用 `T[]`，
+  单值属性使用 `Relation<T>`。`RelationComputed` 也遵循同一规则，其中集合字段
+  必须保持直接数组类型，才能保留 `design:type = Array`。
+- 列表接口优先开启 `skipNonQueryableFields: true`，只给确实允许公开查询的字段
+  添加 `@QueryXXX`。
+- NICOT 管理的资源优先通过 `CrudService` / `CrudBase` 访问，使生命周期、relations
+  与返回裁剪保持一致。
+- 直接使用 TypeORM repository 的代码应当是边界清晰的自定义流程，并明确它不会
+  自动经过 NICOT 生命周期。
+
+---
+
 ## 安装
 
 ```bash
-npm install nicot typeorm @nestjs/typeorm class-validator class-transformer reflect-metadata @nestjs/swagger
+npm install nicot @nestjs/config typeorm @nestjs/typeorm class-validator class-transformer reflect-metadata @nestjs/swagger
 ```
+
+当前版本面向：
+
+- NestJS ^12
+- `@nestjs/typeorm` ^12
+- TypeORM ^0.3.27 或 ^1
+- Node.js ^20.19、^22.12 或 >=24
 
 ---
 
