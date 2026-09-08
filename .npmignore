@@ -8,6 +8,8 @@
 Dockerfile
 /src
 /coverage
+/test
 /tests
+/dist/test
 /dist/tests
 /build.js

@@ -3,6 +3,9 @@
 		"outDir": "dist",
 		"module": "esnext",
 		"moduleResolution": "bundler",
+		"paths": {
+			"nicot": ["./index.ts"]
+		},
 		"target": "es2023",
 		"esModuleInterop": true,
 		"emitDecoratorMetadata": true,
@@ -11,12 +14,18 @@
 		"declaration": true,
 		"sourceMap": true,
 		"strict": false,
-		"skipLibCheck": true
+		"skipLibCheck": true,
+		"types": [
+			"node",
+			"vitest/globals"
+		]
 	},
 	"compileOnSave": true,
 	"allowJs": true,
 	"include": [
 		"*.ts",
-		"src/**/*.ts"
+		"src/**/*.ts",
+		"test/**/*.ts",
+		"tests/**/*.ts"
 	]
 }

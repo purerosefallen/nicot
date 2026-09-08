@@ -35,7 +35,10 @@ async function loadEsbuild() {
   try { return require('esbuild'); }
   catch { const mod = await import('esbuild'); return mod.build ? mod : mod.default; }
 }
-function tsconfigPath() { return fs.existsSync('tsconfig.json') ? 'tsconfig.json' : undefined; }
+function tsconfigPath() {
+  if (fs.existsSync('tsconfig.build.json')) return 'tsconfig.build.json';
+  return fs.existsSync('tsconfig.json') ? 'tsconfig.json' : undefined;
+}
 function entryPointsFromPkg(/*pkg*/) { return ['index.ts']; }
 
 /* ------------------------- esbuild builds ------------------------- */
@@ -71,7 +74,7 @@ function buildTypesAPI(outDir = DIST_DIR) {
     process.exit(1);
   }
 
-  const cfgPath = ts.findConfigFile('./', ts.sys.fileExists, 'tsconfig.json');
+  const cfgPath = tsconfigPath();
 
   let fileNames, options;
   if (cfgPath) {
