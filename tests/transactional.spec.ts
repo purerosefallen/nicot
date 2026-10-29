@@ -10,7 +10,7 @@ import {
 } from '../src/transactional-typeorm.module';
 import { DataSource, Repository } from 'typeorm';
 import { BlankReturnMessageDto } from 'nesties';
-import { NestExpressApplication } from '@nestjs/platform-express';
+import { NestNodeApplication, NodeAdapter } from '@nestjs/platform-node';
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm';
 import request from 'supertest';
 
@@ -89,7 +89,7 @@ class TxUserController extends dec.baseController() {
 }
 
 describe('transactional-typeorm', () => {
-  let app: NestExpressApplication;
+  let app: NestNodeApplication;
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -118,7 +118,9 @@ describe('transactional-typeorm', () => {
       controllers: [TxUserController],
     }).compile();
 
-    app = moduleRef.createNestApplication<NestExpressApplication>();
+    app = moduleRef.createNestApplication<NestNodeApplication>(
+      new NodeAdapter(),
+    );
     await app.init();
   });
 

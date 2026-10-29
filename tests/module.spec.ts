@@ -1,4 +1,4 @@
-import { NestExpressApplication } from '@nestjs/platform-express';
+import { NestNodeApplication, NodeAdapter } from '@nestjs/platform-node';
 import { Controller, Injectable } from '@nestjs/common';
 import { CrudService } from '../src/crud-base';
 import { Book, Gender, User } from './utility/user';
@@ -96,7 +96,7 @@ class TxUserController extends dec.baseController() {
 }
 
 describe('app', () => {
-  let app: NestExpressApplication;
+  let app: NestNodeApplication;
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
@@ -123,7 +123,7 @@ describe('app', () => {
         TxUserController,
       ],
     }).compile();
-    app = module.createNestApplication<NestExpressApplication>();
+    app = module.createNestApplication<NestNodeApplication>(new NodeAdapter());
     const documentConfig = new DocumentBuilder()
       .setTitle('test')
       .setDescription('test')

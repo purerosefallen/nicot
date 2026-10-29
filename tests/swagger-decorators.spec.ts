@@ -1,3 +1,4 @@
+import { NodeAdapter } from '@nestjs/platform-node';
 import 'reflect-metadata';
 
 import { Controller, Get } from '@nestjs/common';
@@ -31,7 +32,7 @@ describe('swagger decorators', () => {
     const testingModule = await Test.createTestingModule({
       controllers: [DocsController],
     }).compile();
-    const app = testingModule.createNestApplication();
+    const app = testingModule.createNestApplication(new NodeAdapter());
     await app.init();
 
     const document = SwaggerModule.createDocument(

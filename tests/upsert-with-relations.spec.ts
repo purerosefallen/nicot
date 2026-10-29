@@ -2,7 +2,7 @@
 import { Entity, ManyToOne, OneToMany } from 'typeorm';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
-import { NestExpressApplication } from '@nestjs/platform-express';
+import { NestNodeApplication, NodeAdapter } from '@nestjs/platform-node';
 import { Test } from '@nestjs/testing';
 
 import { CrudService } from '../src/crud-base';
@@ -53,7 +53,7 @@ class ParentService extends CrudService(Parent, {
 }
 
 describe('upsert (include relations)', () => {
-  let app: NestExpressApplication;
+  let app: NestNodeApplication;
   let parentService: ParentService;
 
   beforeEach(async () => {
@@ -77,7 +77,7 @@ describe('upsert (include relations)', () => {
       providers: [ParentService],
     }).compile();
 
-    app = module.createNestApplication<NestExpressApplication>();
+    app = module.createNestApplication<NestNodeApplication>(new NodeAdapter());
     await app.init();
 
     parentService = app.get(ParentService);

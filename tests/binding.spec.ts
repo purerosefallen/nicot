@@ -12,7 +12,7 @@ import {
 import { Injectable } from '@nestjs/common';
 import { CrudService } from '../src/crud-base';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
-import { NestExpressApplication } from '@nestjs/platform-express';
+import { NestNodeApplication, NodeAdapter } from '@nestjs/platform-node';
 import { Test } from '@nestjs/testing';
 import { Type } from 'class-transformer';
 
@@ -149,7 +149,7 @@ class BindingValueCasesService extends CrudService(BindingValueEntity) {
 }
 
 describe('binding', () => {
-  let app: NestExpressApplication;
+  let app: NestNodeApplication;
   let articleService: ArticleService;
   let slowArticleService: SlowArticleService;
   let bindingValueCasesService: BindingValueCasesService;
@@ -175,7 +175,7 @@ describe('binding', () => {
       providers: [ArticleService, SlowArticleService, BindingValueCasesService],
     }).compile();
 
-    app = module.createNestApplication<NestExpressApplication>();
+    app = module.createNestApplication<NestNodeApplication>(new NodeAdapter());
     await app.init();
 
     articleService = app.get(ArticleService);

@@ -1,6 +1,6 @@
 import { IdBase } from '../src/bases';
 import { NotQueryable, QueryFullText, StringColumn } from '../src/decorators';
-import { NestExpressApplication } from '@nestjs/platform-express';
+import { NestNodeApplication, NodeAdapter } from '@nestjs/platform-node';
 import { Test } from '@nestjs/testing';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { CrudService } from '../src/crud-base';
@@ -42,7 +42,7 @@ describe('dummy2', () => {
 });
 
 describe('fulltext', () => {
-  let app: NestExpressApplication;
+  let app: NestNodeApplication;
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
@@ -64,7 +64,7 @@ describe('fulltext', () => {
       ],
       providers: [ArticleService],
     }).compile();
-    app = module.createNestApplication<NestExpressApplication>();
+    app = module.createNestApplication<NestNodeApplication>(new NodeAdapter());
     await app.init();
   });
 

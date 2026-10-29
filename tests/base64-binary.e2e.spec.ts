@@ -1,5 +1,5 @@
 // tests/base64-binary.e2e.spec.ts
-import { NestExpressApplication } from '@nestjs/platform-express';
+import { NestNodeApplication, NodeAdapter } from '@nestjs/platform-node';
 import { Controller, Injectable } from '@nestjs/common';
 import { InjectDataSource, TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -92,7 +92,7 @@ const SIG = Buffer.from([0xde, 0xad, 0xbe, 0xef]);
 const SIG_B64 = SIG.toString('base64');
 
 describe('Base64BinaryColumn CRUD e2e (supertest)', () => {
-  let app: NestExpressApplication;
+  let app: NestNodeApplication;
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
@@ -115,7 +115,7 @@ describe('Base64BinaryColumn CRUD e2e (supertest)', () => {
       controllers: [BinaryFileController],
     }).compile();
 
-    app = module.createNestApplication<NestExpressApplication>();
+    app = module.createNestApplication<NestNodeApplication>(new NodeAdapter());
     await app.init();
   });
 

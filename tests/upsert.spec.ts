@@ -2,7 +2,7 @@ import { Entity } from 'typeorm';
 import { Injectable } from '@nestjs/common';
 import { CrudService } from '../src/crud-base';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
-import { NestExpressApplication } from '@nestjs/platform-express';
+import { NestNodeApplication, NodeAdapter } from '@nestjs/platform-node';
 import { Test } from '@nestjs/testing';
 
 import { IdBase, StringIdBase } from '../src/bases';
@@ -141,7 +141,7 @@ class BindingUpsertService extends CrudService(BindingUpsertEntity) {
 }
 
 describe('upsert', () => {
-  let app: NestExpressApplication;
+  let app: NestNodeApplication;
 
   let singleSvc: SingleUpsertService;
   let doubleSvc: DoubleUpsertService;
@@ -182,7 +182,7 @@ describe('upsert', () => {
       ],
     }).compile();
 
-    app = module.createNestApplication<NestExpressApplication>();
+    app = module.createNestApplication<NestNodeApplication>(new NodeAdapter());
     await app.init();
 
     singleSvc = app.get(SingleUpsertService);
